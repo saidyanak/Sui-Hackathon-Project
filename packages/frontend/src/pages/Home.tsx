@@ -90,36 +90,48 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
       {/* Header */}
-      <header className="bg-gray-800 bg-opacity-50 backdrop-blur-lg border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              42 Community Platform
-            </h1>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
-                {user?.avatar && (
-                  <img
-                    src={user.avatar}
-                    alt={user.username}
-                    className="w-10 h-10 rounded-full border-2 border-purple-500"
-                  />
-                )}
-                <div className="text-white">
-                  <p className="font-semibold">{user?.username || user?.email}</p>
-                  <p className="text-xs text-gray-400">{user?.role}</p>
-                </div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
-              >
-                Çıkış
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+       <header className="bg-gray-800 bg-opacity-50 backdrop-blur-lg border-b border-gray-700">
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+           <div className="flex justify-between items-center">
+             <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+               42 Community Platform
+             </h1>
+         
+             <div className="flex items-center gap-4">
+         
+               {/* 🟣 TEKLİF OLUŞTUR BUTONU */}
+               <button
+                 onClick={() => navigate('/tasks/create')}
+                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md"
+               >
+                 + Teklif Oluştur
+               </button>
+         
+               {/* Kullanıcı bilgisi */}
+               <div className="flex items-center gap-3">
+                 {user?.avatar && (
+                   <img
+                     src={user.avatar}
+                     alt={user.username}
+                     className="w-10 h-10 rounded-full border-2 border-purple-500"
+                   />
+                 )}
+                 <div className="text-white">
+                   <p className="font-semibold">{user?.username || user?.email}</p>
+                   <p className="text-xs text-gray-400">{user?.role}</p>
+                 </div>
+               </div>
+               
+               <button
+                 onClick={handleLogout}
+                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+               >
+                 Çıkış
+               </button>
+             </div>
+           </div>
+         </div>
+       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
