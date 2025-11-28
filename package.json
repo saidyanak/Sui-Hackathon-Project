@@ -19,5 +19,9 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "@mysten/dapp-kit": "^0.19.9",
+    "@mysten/sui.js": "^0.54.1"
   }
 }
