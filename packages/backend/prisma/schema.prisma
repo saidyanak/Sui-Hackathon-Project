@@ -1,0 +1,122 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  username        String?   @unique
+  firstName       String?
+  lastName        String?
+  avatar          String?
+
+  intraId         Int?      @unique
+  googleId        String?   @unique
+
+  suiWalletAddress String?
+
+  coalitionId     String?
+  role            String    @default("USER")
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  coalition       Coalition?  @relation(fields: [coalitionId], references: [id])
+  tasksCreated    Task[]      @relation("TaskCreator")
+  donations       Donation[]
+  participations  TaskParticipant[]
+  comments        Comment[]
+  nftAchievements NFTAchievement[]
+}
+
+model Coalition {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  color       String
+  leaderId    String?
+  createdAt   DateTime @default(now())
+
+  users       User[]
+  tasks       Task[]
+}
+
+model Task {
+  id            String     @id @default(uuid())
+  title         String
+  description   String
+  type          String
+  status        String     @default("OPEN")
+  creatorId     String
+  coalitionId   String?
+  targetAmount  Float?
+  currentAmount Float      @default(0)
+  startDate     DateTime?
+  endDate       DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  creator       User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  coalition     Coalition? @relation(fields: [coalitionId], references: [id])
+  donations     Donation[]
+  participants  TaskParticipant[]
+  comments      Comment[]
+}
+
+model Donation {
+  id              String   @id @default(uuid())
+  taskId          String
+  userId          String
+  amount          Float
+  transactionHash String?  @unique
+  createdAt       DateTime @default(now())
+
+  task            Task     @relation(fields: [taskId], references: [id])
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+model TaskParticipant {
+  id        String    @id @default(uuid())
+  taskId    String
+  userId    String
+  status    String    @default("REGISTERED")
+  createdAt DateTime  @default(now())
+
+  task      Task      @relation(fields: [taskId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([taskId, userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  taskId    String
+  userId    String
+  parentId  String?
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task      Task     @relation(fields: [taskId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies   Comment[] @relation("CommentReplies")
+}
+
+model NFTAchievement {
+  id              String   @id @default(uuid())
+  userId          String
+  nftObjectId     String?  @unique
+  achievementType String
+  taskId          String?
+  metadataUrl     String?
+  imageUrl        String?
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+}
