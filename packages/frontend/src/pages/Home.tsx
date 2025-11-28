@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { taskService } from '../services/taskService';
+import { WalletConnect } from '../components/WalletConnect';
 
 interface Task {
   id: string;
@@ -98,7 +99,9 @@ export default function Home() {
              </h1>
          
              <div className="flex items-center gap-4">
-         
+               {/* Wallet Connect */}
+               <WalletConnect />
+
                {/* 🟣 TEKLİF OLUŞTUR BUTONU */}
                <button
                  onClick={() => navigate('/tasks/create')}
