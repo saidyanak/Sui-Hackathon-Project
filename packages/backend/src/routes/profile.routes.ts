@@ -21,12 +21,23 @@ router.get('/stats', authMiddleware, async (req, res) => {
         totalDonated: true,
         reputationScore: true,
         profileId: true,
+        nftAchievements: {
+          select: {
+            achievementType: true,
+            nftObjectId: true,
+            imageUrl: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
     if (!userData) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    // Claimed achievement type'larını number array olarak döndür
+    const claimedAchievements = userData.nftAchievements.map(a => parseInt(a.achievementType));
 
     res.json({
       success: true,
@@ -39,6 +50,8 @@ router.get('/stats', authMiddleware, async (req, res) => {
         reputationScore: userData.reputationScore,
       },
       profileId: userData.profileId,
+      claimedAchievements,
+      nftAchievements: userData.nftAchievements,
     });
   } catch (error) {
     console.error('Failed to get user stats:', error);
@@ -244,6 +257,21 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Achievement type is required' });
     }
 
+    // Bu achievement zaten claim edilmiş mi kontrol et
+    const existingClaim = await prisma.nFTAchievement.findFirst({
+      where: {
+        userId: user.id,
+        achievementType: String(achievementType),
+      },
+    });
+
+    if (existingClaim) {
+      return res.status(400).json({ 
+        error: 'Bu achievement zaten claim edilmiş!',
+        nftId: existingClaim.nftObjectId,
+      });
+    }
+
     // Kullanıcının wallet adresi olmalı
     const userWalletAddress = user.suiWalletAddress;
     if (!userWalletAddress) {
@@ -349,10 +377,34 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
         obj.objectType?.includes('::nft::AchievementNFT')
     );
 
+    // Achievement isimlerini tanımla
+    const achievementNames = [
+      'İlk Görev',
+      'İlk Bağış', 
+      'Görev Oluşturucu',
+      'Cömert Bağışçı',
+      'Aktif Katılımcı',
+      'Topluluk Lideri',
+      'Destekçi',
+      'Süper Gönüllü',
+      'Efsanevi 42'
+    ];
+
+    // NFTAchievement tablosuna kaydet
+    await prisma.nFTAchievement.create({
+      data: {
+        userId: user.id,
+        nftObjectId: nftObject?.objectId || null,
+        achievementType: String(achievementType),
+        imageUrl: `https://api.dicebear.com/7.x/shapes/svg?seed=achievement-${achievementType}`,
+      },
+    });
+
     res.json({
       success: true,
       digest: result.digest,
       nftId: nftObject?.objectId || null,
+      achievementName: achievementNames[achievementType] || 'Achievement',
       message: 'Achievement NFT başarıyla claim edildi!',
     });
   } catch (error) {
