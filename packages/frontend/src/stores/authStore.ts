@@ -53,6 +53,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('userProfileId');
+    // Wallet connection bilgilerini de temizle (dapp-kit storage)
+    localStorage.removeItem('sui-dapp-kit:wallet-connection-info');
     set({ user: null, token: null, isAuthenticated: false });
   },
 }));

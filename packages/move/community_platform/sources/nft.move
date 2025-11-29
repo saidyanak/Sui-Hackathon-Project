@@ -226,6 +226,67 @@ module community_platform::nft {
         transfer::public_transfer(nft, recipient_address);
     }
 
+    // Doğrudan NFT mint - UserProfile kullanmadan (Eligibility backend'de kontrol edilir)
+    // Bu fonksiyon owned object erişim sorunu olmadan sponsor wallet ile çalışır
+    public entry fun mint_achievement_direct_sponsored(
+        recipient_address: address,  // NFT'yi alacak kullanıcının adresi
+        achievement_type: u8,
+        // Backend'den gelen stats (eligibility kontrolü için)
+        tasks_completed: u64,
+        donations_made: u64,
+        total_donated: u64,
+        reputation_score: u64,
+        ctx: &mut TxContext
+    ) {
+        // Achievement type valid mi?
+        assert!(achievement_type <= ACHIEVEMENT_LEGENDARY, EInvalidAchievementType);
+
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+
+        let (name, description, image_url, rarity) = get_achievement_details(achievement_type);
+
+        let metadata = AchievementMetadata {
+            rarity,
+            tasks_completed,
+            donations_made,
+            total_donated_amount: total_donated,
+            reputation_score,
+        };
+
+        let nft_uid = object::new(ctx);
+        let nft_id = object::uid_to_inner(&nft_uid);
+
+        let nft = AchievementNFT {
+            id: nft_uid,
+            name,
+            description,
+            achievement_type,
+            image_url: url::new_unsafe_from_bytes(*string::as_bytes(&image_url)),
+            earned_at: timestamp,
+            recipient: recipient_address,
+            metadata,
+        };
+
+        event::emit(AchievementUnlocked {
+            recipient: recipient_address,
+            achievement_type,
+            achievement_name: name,
+            rarity,
+            timestamp,
+        });
+
+        event::emit(NFTMinted {
+            nft_id,
+            recipient: recipient_address,
+            achievement_type,
+            name,
+            timestamp,
+        });
+
+        // NFT'yi kullanıcıya transfer et
+        transfer::public_transfer(nft, recipient_address);
+    }
+
     // Check if user is eligible for an achievement
     fun check_eligibility(user_profile: &UserProfile, achievement_type: u8): bool {
         if (achievement_type == ACHIEVEMENT_FIRST_TASK) {

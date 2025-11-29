@@ -5,6 +5,7 @@ import { WalletConnect } from "../components/WalletConnect";
 import { taskService } from "../services/taskService";
 import { useQuery } from "@tanstack/react-query";
 import TaskCard from "../components/TaskCard";
+import { useDisconnectWallet } from "@mysten/dapp-kit";
 
 // The frontend interface for a Task (from Sui blockchain)
 interface Task {
@@ -31,6 +32,7 @@ interface Task {
 export default function Home() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { mutate: disconnectWallet } = useDisconnectWallet();
   const [filter, setFilter] = useState<string>("all");
 
   const { data: tasks = [], isLoading: loading, error } = useQuery({
@@ -95,6 +97,15 @@ export default function Home() {
   });
 
   const handleLogout = () => {
+    // Wallet bağlantısını kes
+    try {
+      disconnectWallet();
+    } catch (e) {
+      console.log('Wallet disconnect error:', e);
+    }
+    // LocalStorage'dan wallet ve profile bilgilerini temizle
+    localStorage.removeItem('userProfileId');
+    // Auth logout
     logout();
     navigate("/login");
   };

@@ -236,18 +236,12 @@ router.post('/migrate-all', async (req, res) => {
 router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
   try {
     const user = (req as any).user;
-    const { achievementType, profileId } = req.body;
+    const { achievementType } = req.body;
 
-    console.log('NFT Claim request:', { achievementType, profileId, userProfileId: user.profileId, walletAddress: user.suiWalletAddress });
+    console.log('NFT Claim request:', { achievementType, walletAddress: user.suiWalletAddress });
 
     if (achievementType === undefined) {
       return res.status(400).json({ error: 'Achievement type is required' });
-    }
-
-    // ProfileId kontrolü
-    const userProfileId = profileId || user.profileId;
-    if (!userProfileId) {
-      return res.status(400).json({ error: 'Profile ID not found. Please create a profile first by creating a task or voting.' });
     }
 
     // Kullanıcının wallet adresi olmalı
@@ -256,16 +250,93 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
     }
 
-    console.log('Executing NFT claim:', { userProfileId, userWalletAddress, achievementType, packageId: PACKAGE_ID });
+    // Backend'den user stats al
+    const userData = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        tasksCreated: true,
+        tasksParticipated: true,
+        votesCount: true,
+        donationsCount: true,
+        totalDonated: true,
+        reputationScore: true,
+      },
+    });
 
-    // Sponsored NFT claim transaction
+    if (!userData) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Eligibility check (backend'de)
+    const stats = {
+      tasksCreated: userData.tasksCreated || 0,
+      tasksParticipated: userData.tasksParticipated || 0,
+      votesCount: userData.votesCount || 0,
+      donationsCount: userData.donationsCount || 0,
+      totalDonated: Number(userData.totalDonated || 0),
+      reputationScore: userData.reputationScore || 0,
+    };
+
+    // Achievement eligibility kontrolü
+    let eligible = false;
+    switch (achievementType) {
+      case 0: // First Task
+        eligible = stats.tasksParticipated >= 1;
+        break;
+      case 1: // First Donation
+        eligible = stats.donationsCount >= 1;
+        break;
+      case 2: // Task Creator
+        eligible = stats.tasksCreated >= 1;
+        break;
+      case 3: // Generous Donor (10 SUI = 10_000_000_000 MIST)
+        eligible = stats.totalDonated >= 10_000_000_000;
+        break;
+      case 4: // Active Participant (10+ tasks)
+        eligible = stats.tasksParticipated >= 10;
+        break;
+      case 5: // Community Leader (5+ tasks created)
+        eligible = stats.tasksCreated >= 5;
+        break;
+      case 6: // Supporter (20+ donations)
+        eligible = stats.donationsCount >= 20;
+        break;
+      case 7: // Super Volunteer (50+ tasks)
+        eligible = stats.tasksParticipated >= 50;
+        break;
+      case 8: // Legendary
+        eligible = stats.reputationScore >= 100 && stats.tasksParticipated >= 20;
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid achievement type' });
+    }
+
+    if (!eligible) {
+      return res.status(400).json({ 
+        error: 'Not eligible for this achievement',
+        stats,
+        requiredFor: achievementType,
+      });
+    }
+
+    console.log('Executing NFT claim with direct mint:', { 
+      userWalletAddress, 
+      achievementType, 
+      stats,
+      packageId: PACKAGE_ID 
+    });
+
+    // Direct NFT mint - UserProfile kullanmadan
     const tx = new Transaction();
     tx.moveCall({
-      target: `${PACKAGE_ID}::nft::claim_and_mint_achievement_sponsored`,
+      target: `${PACKAGE_ID}::nft::mint_achievement_direct_sponsored`,
       arguments: [
-        tx.object(userProfileId),
         tx.pure.address(userWalletAddress),
         tx.pure.u8(achievementType),
+        tx.pure.u64(stats.tasksParticipated), // tasks_completed
+        tx.pure.u64(stats.donationsCount),    // donations_made
+        tx.pure.u64(stats.totalDonated),      // total_donated
+        tx.pure.u64(stats.reputationScore),   // reputation_score
       ],
     });
 

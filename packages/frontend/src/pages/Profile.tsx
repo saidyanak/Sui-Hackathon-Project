@@ -58,6 +58,53 @@ export default function Profile() {
   // Profile ID'yi local storage'dan al
   const [profileId, setProfileId] = useState<string | null>(localStorage.getItem('userProfileId'));
 
+  // Achievement eligibility hesapla - loadProfile'dan önce tanımlanmalı
+  const calculateEligibleAchievements = (profile: any) => {
+    if (!profile?.stats) return [];
+
+    const eligible: any[] = [];
+    const earnedIds = profile.achievements?.map((a: any) => a) || [];
+
+    // İlk Görev
+    if (profile.stats.tasksCompleted >= 1 && !earnedIds.includes(0)) {
+      eligible.push(ACHIEVEMENTS[0]);
+    }
+    // İlk Bağış
+    if (profile.stats.donationsMade >= 1 && !earnedIds.includes(1)) {
+      eligible.push(ACHIEVEMENTS[1]);
+    }
+    // Görev Oluşturucu
+    if (profile.stats.tasksCreated >= 1 && !earnedIds.includes(2)) {
+      eligible.push(ACHIEVEMENTS[2]);
+    }
+    // Cömert Bağışçı (10 SUI = 10_000_000_000 MIST)
+    if (profile.stats.totalDonatedAmount >= 10_000_000_000 && !earnedIds.includes(3)) {
+      eligible.push(ACHIEVEMENTS[3]);
+    }
+    // Aktif Katılımcı
+    if (profile.stats.tasksParticipated >= 10 && !earnedIds.includes(4)) {
+      eligible.push(ACHIEVEMENTS[4]);
+    }
+    // Topluluk Lideri
+    if (profile.stats.proposalsApproved >= 5 && !earnedIds.includes(5)) {
+      eligible.push(ACHIEVEMENTS[5]);
+    }
+    // Destekçi
+    if (profile.stats.donationsMade >= 20 && !earnedIds.includes(6)) {
+      eligible.push(ACHIEVEMENTS[6]);
+    }
+    // Süper Gönüllü
+    if (profile.stats.tasksCompleted >= 50 && !earnedIds.includes(7)) {
+      eligible.push(ACHIEVEMENTS[7]);
+    }
+    // Efsanevi
+    if (profile.reputationScore >= 100 && profile.stats.tasksCompleted >= 20 && !earnedIds.includes(8)) {
+      eligible.push(ACHIEVEMENTS[8]);
+    }
+
+    return eligible;
+  };
+
   useEffect(() => {
     loadProfile();
   }, [user, currentAccount]);
@@ -115,23 +162,29 @@ export default function Profile() {
               username: user?.username || onChainProfile.displayName,
               avatar: user?.avatar,
               firstName: user?.firstName,
-            lastName: user?.lastName,
-            email: user?.email || onChainProfile.email,
-          });
+              lastName: user?.lastName,
+              email: user?.email || onChainProfile.email,
+            });
 
-          // NFT'leri yükle
-          const walletAddress = currentAccount?.address || user?.suiWalletAddress;
-          if (walletAddress) {
-            const userNFTs = await profileService.getUserNFTs(walletAddress);
-            setNFTs(userNFTs);
+            // NFT'leri yükle
+            const walletAddress = currentAccount?.address || user?.suiWalletAddress;
+            if (walletAddress) {
+              const userNFTs = await profileService.getUserNFTs(walletAddress);
+              setNFTs(userNFTs);
+            }
+
+            // Eligible achievements hesapla (merged stats ile)
+            const eligible = calculateEligibleAchievements({ ...onChainProfile, stats: mergedStats, reputationScore: backendStats.reputationScore });
+            setEligibleAchievements(eligible);
+
+            setLoading(false);
+            return;
           }
-
-          // Eligible achievements hesapla (merged stats ile)
-          const eligible = calculateEligibleAchievements({ ...onChainProfile, stats: mergedStats, reputationScore: backendStats.reputationScore });
-          setEligibleAchievements(eligible);
-
-          setLoading(false);
-          return;
+        } catch (profileError) {
+          console.log('On-chain profile not found or invalid, will show Web2 profile:', profileError);
+          // On-chain profil hatalıysa localStorage'dan sil
+          localStorage.removeItem('userProfileId');
+          setProfileId(null);
         }
       }
 
@@ -172,53 +225,6 @@ export default function Profile() {
       toast.error('Profil yüklenirken hata oluştu');
       setLoading(false);
     }
-  };
-
-  // Achievement eligibility hesapla
-  const calculateEligibleAchievements = (profile: any) => {
-    if (!profile?.stats) return [];
-
-    const eligible: any[] = [];
-    const earnedIds = profile.achievements?.map((a: any) => a) || [];
-
-    // İlk Görev
-    if (profile.stats.tasksCompleted >= 1 && !earnedIds.includes(0)) {
-      eligible.push(ACHIEVEMENTS[0]);
-    }
-    // İlk Bağış
-    if (profile.stats.donationsMade >= 1 && !earnedIds.includes(1)) {
-      eligible.push(ACHIEVEMENTS[1]);
-    }
-    // Görev Oluşturucu
-    if (profile.stats.tasksCreated >= 1 && !earnedIds.includes(2)) {
-      eligible.push(ACHIEVEMENTS[2]);
-    }
-    // Cömert Bağışçı (10 SUI = 10_000_000_000 MIST)
-    if (profile.stats.totalDonatedAmount >= 10_000_000_000 && !earnedIds.includes(3)) {
-      eligible.push(ACHIEVEMENTS[3]);
-    }
-    // Aktif Katılımcı
-    if (profile.stats.tasksParticipated >= 10 && !earnedIds.includes(4)) {
-      eligible.push(ACHIEVEMENTS[4]);
-    }
-    // Topluluk Lideri
-    if (profile.stats.proposalsApproved >= 5 && !earnedIds.includes(5)) {
-      eligible.push(ACHIEVEMENTS[5]);
-    }
-    // Destekçi
-    if (profile.stats.donationsMade >= 20 && !earnedIds.includes(6)) {
-      eligible.push(ACHIEVEMENTS[6]);
-    }
-    // Süper Gönüllü
-    if (profile.stats.tasksCompleted >= 50 && !earnedIds.includes(7)) {
-      eligible.push(ACHIEVEMENTS[7]);
-    }
-    // Efsanevi
-    if (profile.reputationScore >= 100 && profile.stats.tasksCompleted >= 20 && !earnedIds.includes(8)) {
-      eligible.push(ACHIEVEMENTS[8]);
-    }
-
-    return eligible;
   };
 
   // On-chain profil oluştur
