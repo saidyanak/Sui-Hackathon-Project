@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSuiClient, useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { SuiObjectData } from '@mysten/sui/client';
-import { Transaction } from '@mysten/sui/transactions';
+import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { userService } from '../services/userService';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
@@ -55,6 +55,7 @@ const parseTask = (object: SuiObjectData): Omit<Task, 'creator' | 'comments'> & 
     throw new Error('Invalid object content');
   }
   const fields = object.content.fields as any;
+  console.log('Raw fields.votes:', fields.votes); // <--- ADDED LOG
   return {
     id: fields.id.id,
     title: fields.title,
@@ -82,6 +83,8 @@ export default function TaskDetail() {
   const [donationAmount, setDonationAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newComment, setNewComment] = useState('');
+
+  const { user } = useAuthStore((state) => ({ user: state.user })); // Extract user once
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['task', taskId],
@@ -153,12 +156,48 @@ export default function TaskDetail() {
     enabled: !!taskId && !!client,
   });
 
-  const runMutation = (transaction: Transaction, successMessage: string) => {
+  const { data: hasVotedStatus, isLoading: isLoadingHasVoted } = useQuery({
+    queryKey: ['hasVoted', taskId, user?.suiWalletAddress],
+    queryFn: async () => {
+      if (!taskId || !user?.suiWalletAddress) return false;
+
+      const tx = new TransactionBlock();
+      const target = `${PACKAGE_ID}::task::has_voted`;
+      const args = [tx.object(taskId), tx.pure.address(user.suiWalletAddress)];
+      
+      console.log('hasVoted: Calling moveCall with target:', target, 'and arguments:', args);
+
+      tx.moveCall({
+        target: target,
+        arguments: args,
+      });
+
+      const result = await client.devInspectTransactionBlock({
+        sender: user.suiWalletAddress,
+        transactionBlock: tx,
+      });
+      console.log('hasVoted: devInspectTransactionBlock result:', result);
+
+      if (result.results && result.results[0] && result.results[0].returnValues) {
+        const [value, type] = result.results[0].returnValues[0];
+        console.log('hasVoted: Raw return value:', value, 'type:', type);
+        const hasVotedResult = value[0] === 1;
+        console.log('hasVoted: Parsed hasVotedResult:', hasVotedResult);
+        return hasVotedResult;
+      }
+      console.log('hasVoted: No return value found, returning false.');
+      return false;
+    },
+    enabled: !!taskId && !!user?.suiWalletAddress && !!client,
+  });
+
+  const runMutation = (transaction: TransactionBlock, successMessage: string) => {
     setIsSubmitting(true);
     signAndExecute({ transaction }, {
       onSuccess: () => {
         console.log(successMessage);
         queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+        queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.suiWalletAddress] }); // Invalidate hasVoted query
         setIsSubmitting(false);
         setDonationAmount('');
       },
@@ -172,7 +211,7 @@ export default function TaskDetail() {
 
   const handleJoin = () => {
     if (!taskId) return;
-    const tx = new Transaction();
+    const tx = new TransactionBlock();
     tx.moveCall({
       target: `${PACKAGE_ID}::task::join_task`,
       arguments: [tx.object(taskId)],
@@ -185,7 +224,7 @@ export default function TaskDetail() {
     if (!taskId || isNaN(amount) || amount <= 0) return;
 
     const amountInMist = Math.floor(amount * 1_000_000_000);
-    const tx = new Transaction();
+    const tx = new TransactionBlock();
     const coin = tx.splitCoins(tx.gas, [amountInMist]);
     tx.moveCall({
       target: `${PACKAGE_ID}::task::donate`,
@@ -197,7 +236,6 @@ export default function TaskDetail() {
   const handleVote = async (voteType: number) => {
     if (!taskId) return;
 
-    const { user } = useAuthStore.getState();
     if (!user) {
       alert('Oy vermek için giriş yapmalısınız.');
       return;
@@ -220,6 +258,7 @@ export default function TaskDetail() {
       // İşlem başarılı da olsa başarısız da olsa, en güncel veriyi çekmek için invalidate et.
       queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ana sayfadaki listeyi de yenile
+      queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.suiWalletAddress] }); // Invalidate hasVoted query
       setIsSubmitting(false);
     }
   };
@@ -228,7 +267,6 @@ export default function TaskDetail() {
     e.preventDefault();
     if (!newComment.trim() || !taskId) return;
 
-    const { user } = useAuthStore.getState();
     if (!user) {
       alert('Yorum yapmak için giriş yapmalısınız.');
       return;
@@ -292,16 +330,15 @@ export default function TaskDetail() {
   const yesPercentage = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
 
   // Check if user has voted
-  const { user } = useAuthStore.getState();
   const userVote = task?.votes.find(v => v.voter === user?.suiWalletAddress);
-  const hasVoted = !!userVote;
+  const hasVoted = hasVotedStatus; // Use the result from the new query
 
   const isParticipant = currentAccount && task?.participants.includes(currentAccount.address);
   const canJoin = task?.task_type === 1 || task?.task_type === 2;
   const canDonate = task?.task_type === 0 || task?.task_type === 2;
   const isVoting = task?.status === 0;
 
-  if (isLoading) {
+  if (isLoading || isLoadingHasVoted) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500"></div>
@@ -471,7 +508,7 @@ export default function TaskDetail() {
                 {!user && (
                   <div className="bg-orange-900 bg-opacity-30 border border-orange-400 rounded-lg p-3">
                     <p className="text-orange-200 text-sm text-center font-semibold">
-                      ⚠️ Oy kullanmak için giriş yapmalısınız
+                      ⚠️ Oy kullanmak için giriş yapmalasanız
                     </p>
                   </div>
                 )}
@@ -579,8 +616,8 @@ export default function TaskDetail() {
           <form onSubmit={handleCommentSubmit}>
             <h3 className="text-xl font-bold text-white mb-4">Yorum Ekle</h3>
             <div className="flex items-start gap-4">
-              {useAuthStore.getState().user?.avatar && (
-                <img src={useAuthStore.getState().user?.avatar} alt="Your avatar" className="w-10 h-10 rounded-full"/>
+              {user?.avatar && (
+                <img src={user?.avatar} alt="Your avatar" className="w-10 h-10 rounded-full"/>
               )}
               <div className="flex-1">
                 <textarea
@@ -589,7 +626,7 @@ export default function TaskDetail() {
                   placeholder="Yorumunuzu buraya yazın..."
                   rows={3}
                   className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  disabled={!useAuthStore.getState().user || isSubmitting}
+                  disabled={!user || isSubmitting}
                 />
                 <div className="mt-4 flex items-center justify-between">
                   <p className="text-sm text-green-400">
@@ -597,7 +634,7 @@ export default function TaskDetail() {
                   </p>
                   <button
                     type="submit"
-                    disabled={!useAuthStore.getState().user || !newComment.trim() || isSubmitting}
+                    disabled={!user || !newComment.trim() || isSubmitting}
                     className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? 'Gönderiliyor...' : 'Yorum Yap'}
@@ -605,7 +642,7 @@ export default function TaskDetail() {
                 </div>
               </div>
             </div>
-            {!useAuthStore.getState().user && (
+            {!user && (
               <p className="text-sm text-yellow-400 mt-2">Yorum yapmak için giriş yapmalısınız.</p>
             )}
           </form>
