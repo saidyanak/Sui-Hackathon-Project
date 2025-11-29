@@ -22,6 +22,8 @@
   },
   "dependencies": {
     "@mysten/dapp-kit": "^0.19.9",
-    "@mysten/sui.js": "^0.54.1"
+    "@mysten/sui.js": "^0.54.1",
+    "@prisma/client": "^7.0.1",
+    "prisma": "^7.0.1"
   }
 }

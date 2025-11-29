@@ -1,201 +1,104 @@
 import { Router } from 'express';
-import prisma from '../config/database';
+import { Transaction } from '@mysten/sui/transactions';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { executeSponsoredTransaction, PACKAGE_ID } from '../config/sponsor';
 
 const router = Router();
 
-// Get all tasks
-router.get('/', async (req, res) => {
+// Sponsorlu task oluşturma (kullanıcı wallet'a ihtiyaç duymaz, backend gas öder)
+router.post('/create-sponsored', authMiddleware, async (req, res) => {
   try {
-    const { type, status, coalitionId } = req.query;
+    const { title, description, taskType, targetAmount, endDate } = req.body;
 
-    const where: any = {};
-    if (type) where.type = type;
-    if (status) where.status = status;
-    if (coalitionId) where.coalitionId = coalitionId;
-
-    const tasks = await prisma.task.findMany({
-      where,
-      include: {
-        creator: {
-          select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-            avatar: true,
-          },
-        },
-        coalition: true,
-        _count: {
-          select: {
-            participants: true,
-            comments: true,
-            donations: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    res.json({ tasks });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch tasks' });
-  }
-});
-
-// Get single task
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const task = await prisma.task.findUnique({
-      where: { id },
-      include: {
-        creator: {
-          select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-            avatar: true,
-          },
-        },
-        coalition: true,
-        participants: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                firstName: true,
-                lastName: true,
-                avatar: true,
-              },
-            },
-          },
-        },
-        donations: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                firstName: true,
-                lastName: true,
-                avatar: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-        comments: {
-          where: { parentId: null },
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                firstName: true,
-                lastName: true,
-                avatar: true,
-              },
-            },
-            replies: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    username: true,
-                    firstName: true,
-                    lastName: true,
-                    avatar: true,
-                  },
-                },
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    if (!task) {
-      return res.status(404).json({ error: 'Task not found' });
+    if (!title || !description || taskType === undefined || !endDate) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    res.json({ task });
+    // Validate task type
+    if (![0, 1, 2].includes(taskType)) {
+      return res.status(400).json({ error: 'Invalid task type' });
+    }
+
+    const endDateTime = new Date(endDate).getTime();
+    const targetAmountInMist = taskType !== 1
+      ? Math.floor(parseFloat(targetAmount || '0') * 1_000_000_000)
+      : 0;
+
+    // Build transaction
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${PACKAGE_ID}::task::create_task`,
+      arguments: [
+        tx.pure.string(title),
+        tx.pure.string(description),
+        tx.pure.u8(taskType),
+        tx.pure.u64(targetAmountInMist),
+        tx.pure.u64(endDateTime),
+      ],
+    });
+
+    // Execute with sponsor wallet (backend pays gas)
+    const result = await executeSponsoredTransaction(tx);
+
+    res.json({
+      success: true,
+      digest: result.digest,
+      effects: result.effects,
+      objectChanges: result.objectChanges,
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch task' });
+    console.error('Failed to create sponsored task:', error);
+    res.status(500).json({ error: 'Failed to create task', details: (error as Error).message });
   }
 });
 
-// Create task (protected)
-router.post('/', authMiddleware, async (req, res) => {
+// Sponsorlu yorum ekleme
+router.post('/:taskId/comment-sponsored', authMiddleware, async (req, res) => {
   try {
-    const { title, description, type, targetAmount, startDate, endDate, coalitionId } = req.body;
+    const { taskId } = req.params;
+    const { content } = req.body;
+    const user = (req as any).user;
 
-    const task = await prisma.task.create({
-      data: {
-        title,
-        description,
-        type,
-        targetAmount,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        coalitionId,
-        creatorId: req.user!.id,
-      },
-      include: {
-        creator: {
-          select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-            avatar: true,
-          },
-        },
-        coalition: true,
-      },
+    if (!content || !taskId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Kullanıcının wallet adresi olmalı (yoksa virtual wallet oluştur)
+    let userWalletAddress = user.suiWalletAddress;
+
+    if (!userWalletAddress) {
+      // Eğer virtual wallet yoksa oluştur ve kaydet
+      const { Ed25519Keypair } = await import('@mysten/sui/keypairs/ed25519');
+      const keypair = Ed25519Keypair.generate();
+      userWalletAddress = keypair.getPublicKey().toSuiAddress();
+
+      await import('../config/database').then(({ default: prisma }) =>
+        prisma.user.update({
+          where: { id: user.id },
+          data: { suiWalletAddress: userWalletAddress },
+        })
+      );
+    }
+
+    const tx = new Transaction();
+    tx.moveCall({
+      target: `${PACKAGE_ID}::task::add_comment`,
+      arguments: [
+        tx.object(taskId),
+        tx.pure.address(userWalletAddress), // Kullanıcının virtual wallet adresi
+        tx.pure.string(content)
+      ],
     });
 
-    res.status(201).json({ task });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create task' });
-  }
-});
+    const result = await executeSponsoredTransaction(tx);
 
-// Add comment to task (protected)
-router.post('/:id/comments', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { content, parentId } = req.body;
-
-    const comment = await prisma.comment.create({
-      data: {
-        content,
-        taskId: id,
-        userId: req.user!.id,
-        parentId,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-            avatar: true,
-          },
-        },
-      },
+    res.json({
+      success: true,
+      digest: result.digest,
     });
-
-    res.status(201).json({ comment });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to create comment' });
+    console.error('Failed to add sponsored comment:', error);
+    res.status(500).json({ error: 'Failed to add comment', details: (error as Error).message });
   }
 });
 

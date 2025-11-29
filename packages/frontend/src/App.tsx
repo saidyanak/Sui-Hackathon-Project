@@ -6,6 +6,10 @@ import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
 import Callback from './pages/Callback';
 import Home from './pages/Home';
+import CreateTask from './pages/CreateTask';
+import TaskDetail from './pages/TaskDetail';
+import Profile from './pages/Profile';
+import Leaderboard from './pages/Leaderboard';
 import '@mysten/dapp-kit/dist/index.css';
 
 // Configure Sui network
@@ -39,6 +43,38 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Home />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/tasks/create"
+                element={
+                  <ProtectedRoute>
+                    <CreateTask />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/tasks/:taskId"
+                element={
+                  <ProtectedRoute>
+                    <TaskDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/leaderboard"
+                element={
+                  <ProtectedRoute>
+                    <Leaderboard />
                   </ProtectedRoute>
                 }
               />

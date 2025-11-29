@@ -245,10 +245,10 @@ module community_platform::task {
     // Add comment to task
     public entry fun add_comment(
         task: &mut Task,
+        author: address,
         content: vector<u8>,
         ctx: &mut TxContext
     ) {
-        let author = tx_context::sender(ctx);
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
 

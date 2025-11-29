@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@mysten/sui": "^1.45.0",
     "@prisma/client": "^5.0.0",
     "axios": "^1.5.0",
     "cors": "^2.8.5",

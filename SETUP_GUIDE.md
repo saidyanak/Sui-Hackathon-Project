@@ -66,6 +66,12 @@ GOOGLE_CALLBACK_URL="http://localhost:3000/api/auth/google/callback"
 # Frontend URL
 FRONTEND_URL="http://localhost:5173"
 
+# Sui Network Configuration
+# Testnet, mainnet veya devnet
+SUI_NETWORK="testnet"
+# Deployed Move package ID'sini buraya yapıştırın
+SUI_PACKAGE_ID="0x..."
+
 # Server
 PORT=3000
 NODE_ENV=development
