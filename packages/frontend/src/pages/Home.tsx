@@ -36,7 +36,38 @@ export default function Home() {
       try {
         // Fetch tasks directly from Sui blockchain
         const response = await taskService.getTasks();
-        return response || [];
+
+        // Tüm bağışçı adreslerini topla
+        const allDonorAddresses: string[] = [];
+        response.forEach((task: any) => {
+          if (task.donations && Array.isArray(task.donations)) {
+            task.donations.forEach((donation: any) => {
+              if (donation.donor) allDonorAddresses.push(donation.donor);
+            });
+          }
+        });
+
+        // Profil bilgilerini çek
+        let donorProfiles: { [address: string]: { username?: string } } = {};
+        if (allDonorAddresses.length > 0) {
+          const { userService } = await import('../services/userService');
+          const profiles = await userService.getProfilesByWalletAddresses(allDonorAddresses);
+          profiles.forEach((profile: any) => {
+            donorProfiles[profile.suiWalletAddress] = { username: profile.username };
+          });
+        }
+
+        // Her task'ın donations dizisine username ekle
+        const tasksWithUsernames = response.map((task: any) => {
+          if (task.donations && Array.isArray(task.donations)) {
+            task.donations = task.donations.map((donation: any) => ({
+              ...donation,
+              username: donorProfiles[donation.donor]?.username,
+            }));
+          }
+          return task;
+        });
+        return tasksWithUsernames || [];
       } catch (err) {
         console.error('Error fetching tasks:', err);
         throw err;
@@ -320,9 +351,9 @@ export default function Home() {
                   <div className="mb-4">
                     <h4 className="text-sm font-bold text-green-400 mb-2">Bağış Yapanlar</h4>
                     <ul className="text-xs text-gray-300 space-y-1">
-                      {task.donations.map((donation, idx) => (
+                      {task.donations.map((donation: { donor: string; amount: number; username?: string }, idx: number) => (
                         <li key={idx} className="flex justify-between">
-                          <span>{donation.donor.slice(0, 6)}...{donation.donor.slice(-4)}</span>
+                          <span>{donation.username ? donation.username : `${donation.donor.slice(0, 6)}...${donation.donor.slice(-4)}`}</span>
                           <span className="font-semibold text-green-300">{(donation.amount / 1_000_000_000).toFixed(2)} SUI</span>
                         </li>
                       ))}

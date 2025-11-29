@@ -36,6 +36,7 @@ interface Task {
     avatar?: string;
   };
   comments: Comment[];
+  donations?: { donor: string; amount: number }[];
 }
 
 // --- Helper Functions ---
@@ -88,6 +89,29 @@ export default function TaskDetail() {
       const getProfile = (addr: string) => profilesMap.get(addr);
       const creatorProfile = getProfile(parsedData.creatorAddress);
 
+      let donations: { donor: string; amount: number; username?: string }[] = [];
+      let donorAddresses: string[] = [];
+      if (
+        object.data?.content &&
+        'fields' in object.data.content &&
+        Array.isArray((object.data.content as any).fields.donations)
+      ) {
+        donations = (object.data.content as any).fields.donations.map((d: any) => ({
+          donor: d.fields.donor,
+          amount: Number(d.fields.amount),
+        }));
+        donorAddresses = donations.map(d => d.donor);
+      }
+
+      // Donor profillerini çek
+      let donorProfiles: { [address: string]: { username?: string } } = {};
+      if (donorAddresses.length > 0) {
+        const profiles = await userService.getProfilesByWalletAddresses(donorAddresses);
+        profiles.forEach(profile => {
+          donorProfiles[profile.suiWalletAddress] = { username: profile.username };
+        });
+        donations = donations.map(d => ({ ...d, username: donorProfiles[d.donor]?.username }));
+      }
       return {
         id: parsedData.id,
         title: parsedData.title,
@@ -99,12 +123,13 @@ export default function TaskDetail() {
           username: creatorProfile?.username,
           avatar: creatorProfile?.avatar,
         },
-        comments: parsedData.rawComments.map(c => ({
+        comments: parsedData.rawComments.map((c: any) => ({
           author: c.fields.author,
           content: c.fields.content,
           timestamp: new Date(parseInt(c.fields.timestamp, 10)).toISOString(),
           profile: getProfile(c.fields.author),
-        })).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()),
+        })).sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()),
+        donations,
       };
     },
     enabled: !!taskId && !!client,
@@ -225,10 +250,26 @@ export default function TaskDetail() {
           </div>
         </div>
         
+
         <div className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700 mb-8">
           <h2 className="text-2xl font-bold text-white mb-4">Açıklama</h2>
           <p className="text-gray-300 whitespace-pre-wrap">{task?.description}</p>
         </div>
+
+        {/* Bağış yapanlar listesi */}
+        {task?.donations && task.donations.length > 0 && (
+          <div className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border border-green-700 mb-8">
+            <h2 className="text-xl font-bold text-green-400 mb-4">Bağış Yapanlar</h2>
+            <ul className="text-xs text-gray-300 space-y-2">
+              {task.donations.map((donation: { donor: string; amount: number; username?: string }, idx: number) => (
+                <li key={idx} className="flex justify-between">
+                  <span>{donation.username ? donation.username : `${donation.donor.slice(0, 6)}...${donation.donor.slice(-4)}`}</span>
+                  <span className="font-semibold text-green-300">{(donation.amount / 1_000_000_000).toFixed(2)} SUI</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700 mb-8">
           <h2 className="text-2xl font-bold text-white mb-4">Eyleme Geç</h2>
