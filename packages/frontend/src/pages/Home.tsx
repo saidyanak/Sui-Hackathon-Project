@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { WalletConnect } from "../components/WalletConnect";
@@ -6,8 +6,20 @@ import { taskService } from "../services/taskService";
 import { useQuery } from "@tanstack/react-query";
 import TaskCard from "../components/TaskCard";
 import { useDisconnectWallet } from "@mysten/dapp-kit";
+import api from "../services/api";
 
-// The frontend interface for a Task (from Sui blockchain)
+interface UserStats {
+  tasksCreated: number;
+  tasksParticipated: number;
+  votesCount: number;
+  donationsCount: number;
+  totalDonated: string;
+  reputationScore: number;
+}
+
+
+
+// The frontend interface for a Task
 interface Task {
   id: string;
   title: string;
@@ -20,7 +32,6 @@ interface Task {
   participantsCount: number;
   donationsCount: number;
   commentsCount: number;
-  votes?: any[];
   yesVotes?: number;
   noVotes?: number;
   startDate: number;
@@ -70,17 +81,15 @@ export default function Home() {
 
         // Task'lara profil bilgilerini ekle
         const tasksWithUsers = response.map((task: any) => {
-          // Creator bilgisi
           const creatorProfile = profilesMap[task.creator];
-          
-          // Donations'a username ekle
+
           if (task.donations) {
             task.donations = task.donations.map((d: any) => ({
               ...d,
               username: profilesMap[d.donor]?.username,
             }));
           }
-          
+
           return {
             ...task,
             creatorUsername: creatorProfile?.username,
@@ -96,34 +105,49 @@ export default function Home() {
     },
   });
 
+    const [stats, setStats] = useState<UserStats | null>(null);
+
+
+    useEffect(() => {
+      async function loadStats() {
+        try {
+          const res = await api.get("/api/profile/stats");
+        
+          if (res.data.success) {
+            setStats(res.data.stats as UserStats);
+          }
+        } catch (err) {
+          console.log("Stats error:", err);
+        }
+      }
+    
+      loadStats();
+    }, []);
+
+
+
+
   const handleLogout = () => {
-    // Wallet bağlantısını kes
     try {
       disconnectWallet();
     } catch (e) {
-      console.log('Wallet disconnect error:', e);
+      console.log("Wallet disconnect error:", e);
     }
-    // LocalStorage'dan wallet ve profile bilgilerini temizle
-    localStorage.removeItem('userProfileId');
-    // Auth logout
+
+    localStorage.removeItem("userProfileId");
+
     logout();
     navigate("/login");
   };
 
   const getTaskStatusName = (status: number) => {
     switch (status) {
-      case 0:
-        return "Oylamada";
-      case 1:
-        return "Aktif";
-      case 2:
-        return "Reddedildi";
-      case 3:
-        return "Tamamlandı";
-      case 4:
-        return "İptal";
-      default:
-        return "Bilinmiyor";
+      case 0: return "Oylamada";
+      case 1: return "Aktif";
+      case 2: return "Reddedildi";
+      case 3: return "Tamamlandı";
+      case 4: return "İptal";
+      default: return "Bilinmiyor";
     }
   };
 
@@ -152,8 +176,31 @@ export default function Home() {
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-[#0A1A2F] via-[#0C2238] to-[#071018] text-white">
 
-      {/* 🌊 SOL SİDEBAR */}
-      <aside className="w-[300px] border-r border-white/10 bg-white/5 backdrop-blur-xl p-6 flex flex-col shadow-xl">
+      {/* SABİT ÜST MENÜ */}
+      <header className="
+          fixed top-0 left-[300px] right-0 h-20 z-50 
+          bg-white/5 backdrop-blur-xl 
+          flex items-center justify-end px-10 gap-4">
+          
+          
+        <WalletConnect />
+        
+        <button
+          onClick={() => navigate('/tasks/create')}
+          className="bg-[#2AA5FE] text-black font-bold px-5 py-2 rounded-xl shadow-lg hover:bg-[#53bfff] transition"
+        >
+          + Teklif Oluştur
+        </button>
+      </header>
+
+
+      
+      {/* 🌊 SABİT SOL SİDEBAR */}
+      <aside className="
+        w-[300px] fixed top-0 left-0 h-screen 
+        bg-white/5 backdrop-blur-xl 
+        p-6 flex flex-col shadow-xl z-40
+      ">
 
         {/* LOGO */}
         <h1
@@ -175,15 +222,51 @@ export default function Home() {
           <div className="flex-1">
             <p className="font-semibold text-[#8BD7FF]">{user?.username}</p>
             <p className="text-gray-400 text-xs">{user?.email}</p>
-            {localStorage.getItem('userProfileId') && (
+
+            {localStorage.getItem("userProfileId") && (
               <p className="text-gray-500 text-[10px] font-mono mt-1">
-                ID: {localStorage.getItem('userProfileId')?.slice(0, 6)}...
+                ID: {localStorage.getItem("userProfileId")?.slice(0, 6)}...
               </p>
             )}
           </div>
         </div>
 
-        {/* ÇIKIŞ */}
+        
+        {/* 🔥 STAT BLOK — BURAYA EKLEYECEKSİN */}
+        {stats && (
+          <div className="mt-4 bg-white/5 rounded-xl p-4 space-y-3">
+          
+            <div className="flex justify-between text-xs text-gray-300">
+              <span>📝 Oluşturulan</span>
+              <span className="font-semibold">{stats.tasksCreated}</span>
+            </div>
+                
+            <div className="flex justify-between text-xs text-gray-300">
+              <span>🙋 Katılım</span>
+              <span className="font-semibold">{stats.tasksParticipated}</span>
+            </div>
+                
+            <div className="flex justify-between text-xs text-gray-300">
+              <span>💰 Bağış</span>
+              <span className="font-semibold">{stats.donationsCount}</span>
+            </div>
+                
+            <div className="flex justify-between text-xs text-gray-300">
+              <span>💎 Toplam Bağış</span>
+              <span className="font-semibold">
+                {(Number(stats.totalDonated) / 1_000_000_000).toFixed(2)} SUI
+              </span>
+            </div>
+                
+            <div className="flex justify-between text-xs text-gray-300">
+              <span>🗳️ Oy</span>
+              <span className="font-semibold">{stats.votesCount}</span>
+            </div>
+                
+          </div>
+        )}
+
+        {/* ÇIKIŞ BUTONU */}
         <div className="mt-auto">
           <button
             onClick={handleLogout}
@@ -194,22 +277,15 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* 🌟 ANA İÇERİK */}
-      <main className="flex-1 p-10 overflow-y-auto">
+      {/* ===========================
+          🌟 ANA İÇERİK
+      ============================ */}
+      <main className="flex-1 p-10 overflow-y-auto ml-[300px] pt-24">
 
-        {/* ÜST MENU */}
-        <div className="flex justify-end items-center gap-4 mb-10">
-          <WalletConnect />
 
-          <button
-            onClick={() => navigate("/tasks/create")}
-            className="bg-[#2AA5FE] text-black font-bold px-5 py-2 rounded-xl shadow-lg hover:bg-[#53bfff] transition"
-          >
-            + Teklif Oluştur
-          </button>
-        </div>
-
-        {/* FİLTRELER */}
+        {/* ===========================
+            🔍 FİLTRELER
+        ============================ */}
         <div className="flex gap-4 mb-8">
           <button
             onClick={() => setFilter("all")}
@@ -221,6 +297,7 @@ export default function Home() {
           >
             Tümü
           </button>
+
           <button
             onClick={() => setFilter("participation")}
             className={`px-5 py-2 rounded-lg ${
@@ -231,6 +308,7 @@ export default function Home() {
           >
             Katılım
           </button>
+
           <button
             onClick={() => setFilter("proposal")}
             className={`px-5 py-2 rounded-lg ${
@@ -243,7 +321,9 @@ export default function Home() {
           </button>
         </div>
 
-        {/* TEKLİFLER */}
+        {/* ===========================
+            🧩 TEKLİFLER
+        ============================ */}
         {loading ? (
           <div className="text-center mt-20">
             <div className="animate-spin h-12 w-12 border-4 border-[#2AA5FE] border-t-transparent rounded-full mx-auto"></div>
