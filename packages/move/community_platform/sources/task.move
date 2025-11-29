@@ -8,6 +8,7 @@ module community_platform::task {
     use sui::balance::{Self, Balance};
     use std::string::{Self, String};
     use std::vector;
+    use community_platform::profile::{Self, UserProfile};
 
     // Error codes
     const ENotTaskCreator: u64 = 1;
@@ -49,6 +50,7 @@ module community_platform::task {
         participants: vector<address>,
         comments: vector<Comment>,
         votes: vector<Vote>,
+        donations: vector<DonationRecord>,  // Bağış kayıtları
         min_participants: u64,
         max_participants: u64,
         voting_end_date: u64,       // Oylama bitiş tarihi
@@ -66,6 +68,14 @@ module community_platform::task {
     public struct Vote has store, copy, drop {
         voter: address,
         vote_type: u8,  // 1 = yes, 0 = no
+        timestamp: u64,
+    }
+
+    // Donation record structure
+    public struct DonationRecord has store, copy, drop {
+        donor: address,
+        amount: u64,
+        message: String,
         timestamp: u64,
     }
 
@@ -138,14 +148,86 @@ module community_platform::task {
         timestamp: u64,
     }
 
+    // Donation kaydedildi eventi
+    public struct DonationRecorded has copy, drop {
+        task_id: ID,
+        donor: address,
+        amount: u64,
+        message: String,
+        total_donations: u64,
+        timestamp: u64,
+    }
+
     // Create a new task (starts in VOTING status)
+    // Kullanıcı profili ile entegre - task oluşturulduğunda stats güncellenir
     public entry fun create_task(
+        user_profile: &mut UserProfile,
         title: vector<u8>,
         description: vector<u8>,
         task_type: u8,
         budget_amount: u64,
         min_participants: u64,
         max_participants: u64,
+        voting_end_date: u64,
+        ctx: &mut TxContext
+    ) {
+        assert!(task_type <= TASK_TYPE_PROPOSAL, EInvalidTaskType);
+
+        let creator = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(user_profile);
+        assert!(creator == profile_address, ENotTaskCreator);
+
+        let task_uid = object::new(ctx);
+        let task_id = object::uid_to_inner(&task_uid);
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+
+        let task = Task {
+            id: task_uid,
+            title: string::utf8(title),
+            description: string::utf8(description),
+            task_type,
+            status: TASK_STATUS_VOTING,  // Tüm tasklar oylama ile başlar
+            creator,
+            budget_amount,
+            balance: balance::zero(),
+            participants: vector::empty(),
+            comments: vector::empty(),
+            votes: vector::empty(),
+            donations: vector::empty(),
+            min_participants,
+            max_participants,
+            voting_end_date,
+            created_at: timestamp,
+        };
+
+        event::emit(TaskCreated {
+            task_id,
+            creator,
+            title: task.title,
+            task_type,
+            budget_amount,
+            voting_end_date,
+            timestamp,
+        });
+
+        // Kullanıcı profilini güncelle
+        profile::increment_tasks_created(user_profile, ctx);
+
+        transfer::share_object(task);
+    }
+
+    // Sponsorlu task oluşturma - Backend sponsor wallet başka bir kullanıcı adına task oluşturur
+    // Backend tarafından kullanılır (backend gas öder, kullanıcı adına task oluşturulur)
+    // NOT: Bu fonksiyon profil güncelleme yapmaz, kullanıcı claim_task_creation() ile profilini güncelleyecek
+    public entry fun create_task_sponsored(
+        creator_address: address,  // Task'ı oluşturan kullanıcının adresi
+        title: vector<u8>,
+        description: vector<u8>,
+        task_type: u8,
+        budget_amount: u64,
+        max_participants: u64,     // Katılımcı limiti (0 = sınırsız)
         voting_end_date: u64,
         ctx: &mut TxContext
     ) {
@@ -161,13 +243,14 @@ module community_platform::task {
             description: string::utf8(description),
             task_type,
             status: TASK_STATUS_VOTING,  // Tüm tasklar oylama ile başlar
-            creator: tx_context::sender(ctx),
+            creator: creator_address,    // Gerçek kullanıcının adresi
             budget_amount,
             balance: balance::zero(),
             participants: vector::empty(),
             comments: vector::empty(),
             votes: vector::empty(),
-            min_participants,
+            donations: vector::empty(),
+            min_participants: 0,         // Min participants artık kullanılmıyor
             max_participants,
             voting_end_date,
             created_at: timestamp,
@@ -175,7 +258,7 @@ module community_platform::task {
 
         event::emit(TaskCreated {
             task_id,
-            creator: tx_context::sender(ctx),
+            creator: creator_address,
             title: task.title,
             task_type,
             budget_amount,
@@ -183,17 +266,180 @@ module community_platform::task {
             timestamp,
         });
 
+        // NOT: Profil güncellemesi claim_task_creation() ile yapılacak
+
         transfer::share_object(task);
     }
 
-    // Vote on a task (any task type can be voted on)
-    public entry fun vote_task(
+    // Task oluşturulduktan sonra kullanıcı bu fonksiyonu çağırarak profilini günceller
+    // Bu sayede sponsorlu işlemlerde de stats takibi yapılabilir
+    public entry fun claim_task_creation(
+        task: &Task,
+        creator_profile: &mut UserProfile,
+        ctx: &mut TxContext
+    ) {
+        let creator = tx_context::sender(ctx);
+
+        // Sadece task creator'ı çağırabilir
+        assert!(task.creator == creator, ENotTaskCreator);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(creator_profile);
+        assert!(creator == profile_address, ENotTaskCreator);
+
+        // Profili güncelle
+        profile::increment_tasks_created(creator_profile, ctx);
+    }
+
+    // Sponsorlu oy kullanma - Backend sponsor wallet başka bir kullanıcı adına oy kullanır
+    public entry fun vote_task_sponsored(
         task: &mut Task,
-        voter: address, // Voter address (for sponsored transactions)
+        voter_address: address,  // Oy kullanan kullanıcının adresi
         vote_type: u8, // 1 = yes, 0 = no
         ctx: &mut TxContext
     ) {
         assert!(task.status == TASK_STATUS_VOTING, ETaskNotVoting);
+
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+        let task_id = object::uid_to_inner(&task.id);
+
+        // Check if already voted
+        let mut i = 0;
+        let len = vector::length(&task.votes);
+        while (i < len) {
+            if (vector::borrow(&task.votes, i).voter == voter_address) {
+                abort EAlreadyVoted
+            };
+            i = i + 1;
+        };
+
+        // Add vote
+        let vote = Vote {
+            voter: voter_address,
+            vote_type,
+            timestamp,
+        };
+        vector::push_back(&mut task.votes, vote);
+
+        // Count votes
+        let (yes_votes, no_votes) = count_votes(task);
+
+        event::emit(VoteCast {
+            task_id,
+            voter: voter_address,
+            vote_type,
+            yes_votes,
+            no_votes,
+            timestamp,
+        });
+
+        // NOT: Profil güncellemesi claim_vote() ile yapılacak
+    }
+
+    // Oy kullandıktan sonra kullanıcı bu fonksiyonu çağırarak profilini günceller
+    public entry fun claim_vote(
+        task: &Task,
+        voter_profile: &mut UserProfile,
+        ctx: &mut TxContext
+    ) {
+        let voter = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(voter_profile);
+        assert!(voter == profile_address, ENotTaskCreator);
+
+        // Kullanıcı bu task'ta oy kullanmış olmalı
+        assert!(has_voted(task, voter), ENotTaskCreator);
+
+        // Profili güncelle
+        profile::increment_votes_cast(voter_profile, ctx);
+    }
+
+    // Sponsorlu task'a katılma - Backend sponsor wallet başka bir kullanıcı adına katılır
+    public entry fun join_task_sponsored(
+        task: &mut Task,
+        participant_address: address,  // Katılan kullanıcının adresi
+        ctx: &mut TxContext
+    ) {
+        assert!(task.task_type == TASK_TYPE_PARTICIPATION, EInvalidTaskType);
+        assert!(task.status == TASK_STATUS_ACTIVE, ETaskNotActive);
+
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+        let task_id = object::uid_to_inner(&task.id);
+        let current_count = vector::length(&task.participants);
+
+        // Check max participants limit
+        if (task.max_participants > 0) {
+            assert!(current_count < task.max_participants, EParticipantLimitReached);
+        };
+
+        // Check if already participant
+        let mut i = 0;
+        let len = vector::length(&task.participants);
+        while (i < len) {
+            if (*vector::borrow(&task.participants, i) == participant_address) {
+                abort EAlreadyParticipant
+            };
+            i = i + 1;
+        };
+
+        vector::push_back(&mut task.participants, participant_address);
+
+        event::emit(ParticipantJoined {
+            task_id,
+            participant: participant_address,
+            total_participants: vector::length(&task.participants),
+            timestamp,
+        });
+
+        // NOT: Profil güncellemesi claim_task_participation() ile yapılacak
+
+        // Auto-complete if max reached
+        if (task.max_participants > 0 && vector::length(&task.participants) >= task.max_participants) {
+            task.status = TASK_STATUS_COMPLETED;
+            event::emit(TaskCompleted {
+                task_id,
+                completion_type: string::utf8(b"participants_full"),
+                total_participants: vector::length(&task.participants),
+                timestamp,
+            });
+        };
+    }
+
+    // Task'a katıldıktan sonra kullanıcı bu fonksiyonu çağırarak profilini günceller
+    public entry fun claim_task_participation(
+        task: &Task,
+        participant_profile: &mut UserProfile,
+        ctx: &mut TxContext
+    ) {
+        let participant = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(participant_profile);
+        assert!(participant == profile_address, ENotTaskCreator);
+
+        // Kullanıcı bu task'ın katılımcısı olmalı
+        assert!(is_participant(task, participant), ENotTaskCreator);
+
+        // Profili güncelle
+        profile::increment_tasks_participated(participant_profile, ctx);
+    }
+
+    // Vote on a task (any task type can be voted on)
+    // Kullanıcı profili ile entegre - oy kullanıldığında stats güncellenir
+    public entry fun vote_task(
+        task: &mut Task,
+        user_profile: &mut UserProfile,
+        vote_type: u8, // 1 = yes, 0 = no
+        ctx: &mut TxContext
+    ) {
+        assert!(task.status == TASK_STATUS_VOTING, ETaskNotVoting);
+
+        let voter = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(user_profile);
+        assert!(voter == profile_address, ENotTaskCreator);
 
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
@@ -227,6 +473,9 @@ module community_platform::task {
             no_votes,
             timestamp,
         });
+
+        // Kullanıcı profilini güncelle
+        profile::increment_votes_cast(user_profile, ctx);
     }
 
     // Finalize voting (can be called after voting_end_date)
@@ -272,6 +521,8 @@ module community_platform::task {
                     amount,
                     timestamp,
                 });
+                // NOT: Creator'ın profilini güncellemek için ayrı bir fonksiyon çağrılmalı
+                // claim_proposal_approval() fonksiyonu ile
             } else {
                 // PARTICIPATION - return payment to sender
                 transfer::public_transfer(sponsor_payment, tx_context::sender(ctx));
@@ -290,6 +541,29 @@ module community_platform::task {
                 timestamp,
             });
         };
+    }
+
+    // Proposal onaylandıktan sonra creator bu fonksiyonu çağırarak profilini günceller
+    public entry fun claim_proposal_approval(
+        task: &Task,
+        creator_profile: &mut UserProfile,
+        ctx: &mut TxContext
+    ) {
+        let creator = tx_context::sender(ctx);
+
+        // Sadece task creator'ı çağırabilir
+        assert!(task.creator == creator, ENotTaskCreator);
+
+        // Sadece onaylanmış PROPOSAL task'lar için
+        assert!(task.task_type == TASK_TYPE_PROPOSAL, EInvalidTaskType);
+        assert!(task.status == TASK_STATUS_ACTIVE || task.status == TASK_STATUS_COMPLETED, ETaskNotActive);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(creator_profile);
+        assert!(creator == profile_address, ENotTaskCreator);
+
+        // Profili güncelle
+        profile::increment_proposals_approved(creator_profile, ctx);
     }
 
     // Count votes helper
@@ -313,14 +587,21 @@ module community_platform::task {
     }
 
     // Join a participation task (only for PARTICIPATION type, only when ACTIVE)
+    // Kullanıcı profili ile entegre - katıldığında stats güncellenir
     public entry fun join_task(
         task: &mut Task,
+        user_profile: &mut UserProfile,
         ctx: &mut TxContext
     ) {
         assert!(task.task_type == TASK_TYPE_PARTICIPATION, EInvalidTaskType);
         assert!(task.status == TASK_STATUS_ACTIVE, ETaskNotActive);
 
         let participant = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(user_profile);
+        assert!(participant == profile_address, ENotTaskCreator);
+
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
         let current_count = vector::length(&task.participants);
@@ -348,6 +629,9 @@ module community_platform::task {
             total_participants: vector::length(&task.participants),
             timestamp,
         });
+
+        // Kullanıcı profilini güncelle
+        profile::increment_tasks_participated(user_profile, ctx);
 
         // Auto-complete if max reached
         if (task.max_participants > 0 && vector::length(&task.participants) >= task.max_participants) {
@@ -412,6 +696,30 @@ module community_platform::task {
             total_participants: vector::length(&task.participants),
             timestamp,
         });
+        // NOT: Katılımcılar claim_task_completion() fonksiyonu ile profillerini güncelleyecek
+    }
+
+    // Task tamamlandıktan sonra katılımcılar bu fonksiyonu çağırarak profillerini günceller
+    // Bu sayede NFT koşullarına (tasks_completed) uygunluk kontrolü yapılabilir
+    public entry fun claim_task_completion(
+        task: &Task,
+        participant_profile: &mut UserProfile,
+        ctx: &mut TxContext
+    ) {
+        let participant = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(participant_profile);
+        assert!(participant == profile_address, ENotTaskCreator);
+
+        // Task tamamlanmış olmalı
+        assert!(task.status == TASK_STATUS_COMPLETED, ETaskNotActive);
+
+        // Kullanıcı bu task'ın katılımcısı olmalı
+        assert!(is_participant(task, participant), ENotTaskCreator);
+
+        // Profili güncelle
+        profile::increment_tasks_completed(participant_profile, ctx);
     }
 
     // Cancel task (only creator)
@@ -494,6 +802,88 @@ module community_platform::task {
             i = i + 1;
         };
         false
+    }
+
+    // Sponsorlu bağış kaydı - Backend sponsor wallet bağışı kaydeder
+    // Gerçek SUI transferi frontend'den sponsor wallet'a yapılır
+    public entry fun record_donation_sponsored(
+        task: &mut Task,
+        donor_address: address,
+        amount: u64,
+        message: vector<u8>,
+        ctx: &mut TxContext
+    ) {
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+        let task_id = object::uid_to_inner(&task.id);
+
+        // Bağış kaydı oluştur
+        let donation = DonationRecord {
+            donor: donor_address,
+            amount,
+            message: string::utf8(message),
+            timestamp,
+        };
+
+        vector::push_back(&mut task.donations, donation);
+
+        // Event emit et
+        event::emit(DonationRecorded {
+            task_id,
+            donor: donor_address,
+            amount,
+            message: string::utf8(message),
+            total_donations: vector::length(&task.donations),
+            timestamp,
+        });
+    }
+
+    // Bağış yaptıktan sonra kullanıcı profilini günceller (claim donation NFT için)
+    public entry fun claim_donation(
+        task: &Task,
+        donor_profile: &mut UserProfile,
+        ctx: &mut TxContext
+    ) {
+        let donor = tx_context::sender(ctx);
+
+        // Profil sahibi kontrolü
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(donor_profile);
+        assert!(donor == profile_address, ENotTaskCreator);
+
+        // Kullanıcı bu task'a bağış yapmış olmalı
+        assert!(has_donated(task, donor), ENotTaskCreator);
+
+        // Profili güncelle - donation stats
+        profile::increment_donations_made(donor_profile, ctx);
+    }
+
+    // Kullanıcının bağış yapıp yapmadığını kontrol et
+    public fun has_donated(task: &Task, addr: address): bool {
+        let mut i = 0;
+        let len = vector::length(&task.donations);
+        while (i < len) {
+            if (vector::borrow(&task.donations, i).donor == addr) {
+                return true
+            };
+            i = i + 1;
+        };
+        false
+    }
+
+    // Toplam bağış miktarını döndür
+    public fun get_total_donations_amount(task: &Task): u64 {
+        let mut total = 0u64;
+        let mut i = 0;
+        let len = vector::length(&task.donations);
+        while (i < len) {
+            total = total + vector::borrow(&task.donations, i).amount;
+            i = i + 1;
+        };
+        total
+    }
+
+    // Bağış sayısını döndür
+    public fun get_donations_count(task: &Task): u64 {
+        vector::length(&task.donations)
     }
 }
 

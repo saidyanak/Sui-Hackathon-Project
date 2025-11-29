@@ -7,11 +7,12 @@ module community_platform::nft {
     use sui::display;
     use sui::package;
     use std::string::{Self, String};
+    use community_platform::profile::{Self, UserProfile};
 
     // Error codes
     const ENotAuthorized: u64 = 1;
     const EInvalidAchievementType: u64 = 2;
-    const EAlreadyClaimed: u64 = 3;
+    const ENotEligible: u64 = 3;
 
     // Achievement types
     const ACHIEVEMENT_FIRST_TASK: u8 = 0;
@@ -42,24 +43,11 @@ module community_platform::nft {
         tasks_completed: u64,
         donations_made: u64,
         total_donated_amount: u64,
+        reputation_score: u64,
     }
 
     // One-time witness for Display
     public struct NFT has drop {}
-
-    // Achievement registry to prevent duplicate claims
-    public struct AchievementRegistry has key {
-        id: UID,
-        admin: address,
-    }
-
-    // User's achievement tracking
-    public struct UserAchievements has key, store {
-        id: UID,
-        user_address: address,
-        claimed_achievements: vector<u8>,
-        total_nfts: u64,
-    }
 
     // Events
     public struct AchievementUnlocked has copy, drop {
@@ -78,24 +66,9 @@ module community_platform::nft {
         timestamp: u64,
     }
 
-    public struct AchievementClaimed has copy, drop {
-        user_address: address,
-        achievement_type: u8,
-        total_achievements: u64,
-        timestamp: u64,
-    }
-
     // Initialize the module
     fun init(otw: NFT, ctx: &mut TxContext) {
-        let registry_uid = object::new(ctx);
         let admin = tx_context::sender(ctx);
-
-        let registry = AchievementRegistry {
-            id: registry_uid,
-            admin,
-        };
-
-        transfer::share_object(registry);
 
         // Create display for NFTs (for wallets and marketplaces)
         let keys = vector[
@@ -124,24 +97,32 @@ module community_platform::nft {
         transfer::public_transfer(display_obj, admin);
     }
 
-    // Mint achievement NFT
-    public fun mint_achievement(
+    // Mint achievement NFT - UserProfile ile entegre
+    // Bu fonksiyon NFT'yi mint eder VE UserProfile'a achievement ID'yi ekler
+    public entry fun claim_and_mint_achievement(
+        user_profile: &mut UserProfile,
         achievement_type: u8,
-        recipient: address,
-        tasks_completed: u64,
-        donations_made: u64,
-        total_donated_amount: u64,
         ctx: &mut TxContext
-    ): AchievementNFT {
+    ) {
+        let user_address = tx_context::sender(ctx);
+
+        // Kullanıcı kendi profili mi kontrol et
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(user_profile);
+        assert!(user_address == profile_address, ENotAuthorized);
+
+        // Eligibility check - kullanıcı bu achievement'ı kazanmaya uygun mu?
+        assert!(check_eligibility(user_profile, achievement_type), ENotEligible);
+
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
 
         let (name, description, image_url, rarity) = get_achievement_details(achievement_type);
 
         let metadata = AchievementMetadata {
             rarity,
-            tasks_completed,
-            donations_made,
-            total_donated_amount,
+            tasks_completed: profile::get_tasks_completed(user_profile),
+            donations_made: profile::get_donations_made(user_profile),
+            total_donated_amount: profile::get_total_donated_amount(user_profile),
+            reputation_score: profile::get_reputation(user_profile),
         };
 
         let nft_uid = object::new(ctx);
@@ -152,14 +133,14 @@ module community_platform::nft {
             name,
             description,
             achievement_type,
-            image_url: url::new_unsafe_from_bytes(*string::bytes(&image_url)),
+            image_url: url::new_unsafe_from_bytes(*string::as_bytes(&image_url)),
             earned_at: timestamp,
-            recipient,
+            recipient: user_address,
             metadata,
         };
 
         event::emit(AchievementUnlocked {
-            recipient,
+            recipient: user_address,
             achievement_type,
             achievement_name: name,
             rarity,
@@ -168,138 +149,167 @@ module community_platform::nft {
 
         event::emit(NFTMinted {
             nft_id,
-            recipient,
+            recipient: user_address,
             achievement_type,
             name,
             timestamp,
         });
 
-        nft
+        // UserProfile'a achievement ekle
+        profile::add_achievement(user_profile, nft_id, ctx);
+
+        // NFT'yi kullanıcıya transfer et
+        transfer::public_transfer(nft, user_address);
     }
 
-    // Public entry function to claim and mint achievement
-    public entry fun claim_achievement(
-        user_achievements: &mut UserAchievements,
+    // Sponsorlu NFT claim - Backend sponsor wallet başka bir kullanıcı adına NFT mint eder
+    // Bu fonksiyon wallet bağlamadan NFT almak için kullanılır
+    public entry fun claim_and_mint_achievement_sponsored(
+        user_profile: &mut UserProfile,
+        recipient_address: address,  // NFT'yi alacak kullanıcının adresi
         achievement_type: u8,
-        tasks_completed: u64,
-        donations_made: u64,
-        total_donated_amount: u64,
         ctx: &mut TxContext
     ) {
-        assert!(tx_context::sender(ctx) == user_achievements.user_address, ENotAuthorized);
+        // Profil sahibi kontrolü - recipient_address profil sahibi olmalı
+        let (profile_address, _, _, _, _, _) = profile::get_profile_info(user_profile);
+        assert!(recipient_address == profile_address, ENotAuthorized);
 
-        // Check if already claimed
-        let mut i = 0;
-        let len = vector::length(&user_achievements.claimed_achievements);
-        while (i < len) {
-            if (*vector::borrow(&user_achievements.claimed_achievements, i) == achievement_type) {
-                abort EAlreadyClaimed
-            };
-            i = i + 1;
-        };
-
-        // Mark as claimed
-        vector::push_back(&mut user_achievements.claimed_achievements, achievement_type);
-        user_achievements.total_nfts = user_achievements.total_nfts + 1;
-
-        // Mint NFT
-        let nft = mint_achievement(
-            achievement_type,
-            user_achievements.user_address,
-            tasks_completed,
-            donations_made,
-            total_donated_amount,
-            ctx
-        );
+        // Eligibility check - kullanıcı bu achievement'ı kazanmaya uygun mu?
+        assert!(check_eligibility(user_profile, achievement_type), ENotEligible);
 
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
 
-        event::emit(AchievementClaimed {
-            user_address: user_achievements.user_address,
+        let (name, description, image_url, rarity) = get_achievement_details(achievement_type);
+
+        let metadata = AchievementMetadata {
+            rarity,
+            tasks_completed: profile::get_tasks_completed(user_profile),
+            donations_made: profile::get_donations_made(user_profile),
+            total_donated_amount: profile::get_total_donated_amount(user_profile),
+            reputation_score: profile::get_reputation(user_profile),
+        };
+
+        let nft_uid = object::new(ctx);
+        let nft_id = object::uid_to_inner(&nft_uid);
+
+        let nft = AchievementNFT {
+            id: nft_uid,
+            name,
+            description,
             achievement_type,
-            total_achievements: user_achievements.total_nfts,
+            image_url: url::new_unsafe_from_bytes(*string::as_bytes(&image_url)),
+            earned_at: timestamp,
+            recipient: recipient_address,
+            metadata,
+        };
+
+        event::emit(AchievementUnlocked {
+            recipient: recipient_address,
+            achievement_type,
+            achievement_name: name,
+            rarity,
             timestamp,
         });
 
-        // Transfer NFT to recipient
-        transfer::public_transfer(nft, user_achievements.user_address);
+        event::emit(NFTMinted {
+            nft_id,
+            recipient: recipient_address,
+            achievement_type,
+            name,
+            timestamp,
+        });
+
+        // UserProfile'a achievement ekle
+        profile::add_achievement(user_profile, nft_id, ctx);
+
+        // NFT'yi kullanıcıya transfer et (recipient_address'e)
+        transfer::public_transfer(nft, recipient_address);
     }
 
-    // Create user achievements tracker
-    public entry fun create_user_achievements(ctx: &mut TxContext) {
-        let user_achievements = UserAchievements {
-            id: object::new(ctx),
-            user_address: tx_context::sender(ctx),
-            claimed_achievements: vector::empty(),
-            total_nfts: 0,
-        };
-
-        transfer::transfer(user_achievements, tx_context::sender(ctx));
+    // Check if user is eligible for an achievement
+    fun check_eligibility(user_profile: &UserProfile, achievement_type: u8): bool {
+        if (achievement_type == ACHIEVEMENT_FIRST_TASK) {
+            profile::is_eligible_for_first_task(user_profile)
+        } else if (achievement_type == ACHIEVEMENT_ACTIVE_PARTICIPANT) {
+            profile::is_eligible_for_active_participant(user_profile)
+        } else if (achievement_type == ACHIEVEMENT_GENEROUS_DONOR) {
+            profile::is_eligible_for_generous_donor(user_profile)
+        } else if (achievement_type == ACHIEVEMENT_COMMUNITY_LEADER) {
+            profile::is_eligible_for_community_leader(user_profile)
+        } else if (achievement_type == ACHIEVEMENT_SUPPORTER) {
+            profile::is_eligible_for_supporter(user_profile)
+        } else if (achievement_type == ACHIEVEMENT_VOLUNTEER) {
+            profile::is_eligible_for_volunteer(user_profile)
+        } else if (achievement_type == ACHIEVEMENT_LEGENDARY) {
+            profile::is_eligible_for_legendary(user_profile)
+        } else {
+            false
+        }
     }
 
     // Helper function to get achievement details
     fun get_achievement_details(achievement_type: u8): (String, String, String, String) {
         if (achievement_type == ACHIEVEMENT_FIRST_TASK) {
             (
-                string::utf8(b"First Task"),
-                string::utf8(b"Completed your first task in the community"),
-                string::utf8(b"https://example.com/nft/first_task.png"),
+                string::utf8(b"First Task Completed"),
+                string::utf8(b"Completed your first task in the 42 community"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/first_task.png"),
                 string::utf8(b"Common")
             )
         } else if (achievement_type == ACHIEVEMENT_FIRST_DONATION) {
             (
                 string::utf8(b"First Donation"),
                 string::utf8(b"Made your first donation to support the community"),
-                string::utf8(b"https://example.com/nft/first_donation.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/first_donation.png"),
                 string::utf8(b"Common")
             )
         } else if (achievement_type == ACHIEVEMENT_TASK_CREATOR) {
             (
                 string::utf8(b"Task Creator"),
                 string::utf8(b"Created your first community task"),
-                string::utf8(b"https://example.com/nft/task_creator.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/task_creator.png"),
                 string::utf8(b"Rare")
             )
         } else if (achievement_type == ACHIEVEMENT_GENEROUS_DONOR) {
             (
                 string::utf8(b"Generous Donor"),
                 string::utf8(b"Donated more than 10 SUI to community tasks"),
-                string::utf8(b"https://example.com/nft/generous_donor.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/generous_donor.png"),
                 string::utf8(b"Rare")
             )
         } else if (achievement_type == ACHIEVEMENT_ACTIVE_PARTICIPANT) {
             (
                 string::utf8(b"Active Participant"),
                 string::utf8(b"Participated in 10+ community tasks"),
-                string::utf8(b"https://example.com/nft/active_participant.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/active_participant.png"),
                 string::utf8(b"Rare")
             )
         } else if (achievement_type == ACHIEVEMENT_COMMUNITY_LEADER) {
             (
                 string::utf8(b"Community Leader"),
                 string::utf8(b"Created 5+ successful community tasks"),
-                string::utf8(b"https://example.com/nft/community_leader.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/community_leader.png"),
                 string::utf8(b"Epic")
             )
         } else if (achievement_type == ACHIEVEMENT_SUPPORTER) {
             (
                 string::utf8(b"Community Supporter"),
                 string::utf8(b"Donated to 20+ different tasks"),
-                string::utf8(b"https://example.com/nft/supporter.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/supporter.png"),
                 string::utf8(b"Epic")
             )
         } else if (achievement_type == ACHIEVEMENT_VOLUNTEER) {
             (
                 string::utf8(b"Super Volunteer"),
                 string::utf8(b"Completed 50+ participation tasks"),
-                string::utf8(b"https://example.com/nft/volunteer.png"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/volunteer.png"),
                 string::utf8(b"Legendary")
             )
         } else if (achievement_type == ACHIEVEMENT_LEGENDARY) {
             (
-                string::utf8(b"Legendary Contributor"),
-                string::utf8(b"Made an extraordinary contribution to the community"),
-                string::utf8(b"https://example.com/nft/legendary.png"),
+                string::utf8(b"Legendary 42 Contributor"),
+                string::utf8(b"Made an extraordinary contribution to the 42 Turkey community"),
+                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/legendary.png"),
                 string::utf8(b"Legendary")
             )
         } else {
@@ -318,19 +328,14 @@ module community_platform::nft {
         )
     }
 
-    public fun get_user_achievement_count(user_achievements: &UserAchievements): u64 {
-        user_achievements.total_nfts
+    public fun get_nft_metadata(nft: &AchievementNFT): AchievementMetadata {
+        nft.metadata
     }
 
-    public fun has_claimed(user_achievements: &UserAchievements, achievement_type: u8): bool {
-        let mut i = 0;
-        let len = vector::length(&user_achievements.claimed_achievements);
-        while (i < len) {
-            if (*vector::borrow(&user_achievements.claimed_achievements, i) == achievement_type) {
-                return true
-            };
-            i = i + 1;
-        };
-        false
+    // Test/Debug fonksiyonu
+    #[test_only]
+    public fun init_for_testing(ctx: &mut TxContext) {
+        let otw = NFT {};
+        init(otw, ctx);
     }
 }
