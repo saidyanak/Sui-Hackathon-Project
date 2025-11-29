@@ -10,14 +10,17 @@ interface Task {
   id: string;
   title: string;
   description: string;
-  taskType: number; // 0: DONATION, 1: PARTICIPATION, 2: HYBRID
-  status: number; // 0: ACTIVE, 1: COMPLETED, 2: CANCELLED
+  taskType: number; // 0: PARTICIPATION, 1: PROPOSAL
+  status: number; // 0: VOTING, 1: ACTIVE, 2: REJECTED, 3: COMPLETED, 4: CANCELLED
   creator: string; // Sui address
   targetAmount: number;
   currentAmount: number;
   participantsCount: number;
   donationsCount: number;
   commentsCount: number;
+  votes?: any[];
+  yesVotes?: number;
+  noVotes?: number;
   startDate: number;
   endDate: number;
   createdAt: number;
@@ -389,6 +392,30 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* Oylama durumu göstergesi - Sadece VOTING statüsündeyken */}
+                {task.status === 0 && (
+                  <div className="mb-4 p-3 bg-yellow-900 bg-opacity-30 border border-yellow-500 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-yellow-300">🗳️ Oylama Devam Ediyor</span>
+                      <span className="text-xs text-yellow-400">
+                        {task.yesVotes || 0} 👍 / {task.noVotes || 0} 👎
+                      </span>
+                    </div>
+                    {(task.yesVotes !== undefined && task.noVotes !== undefined) && (
+                      <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-green-500 h-full transition-all duration-300"
+                          style={{
+                            width: `${(task.yesVotes + task.noVotes) > 0
+                              ? (task.yesVotes / (task.yesVotes + task.noVotes)) * 100
+                              : 0}%`
+                          }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="pt-4 border-t border-gray-700 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
@@ -412,6 +439,12 @@ export default function Home() {
                         <span className="flex items-center gap-1 text-gray-400">
                           <span className="text-green-400">💰</span>
                           <span className="font-semibold">{task.donationsCount}</span>
+                        </span>
+                      )}
+                      {task.status === 0 && (task.yesVotes !== undefined || task.noVotes !== undefined) && (
+                        <span className="flex items-center gap-1 text-gray-400">
+                          <span className="text-yellow-400">🗳️</span>
+                          <span className="font-semibold">{(task.yesVotes || 0) + (task.noVotes || 0)}</span>
                         </span>
                       )}
                     </div>

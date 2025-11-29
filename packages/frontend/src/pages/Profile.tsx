@@ -51,9 +51,80 @@ export default function Profile() {
               <p className="text-sm text-gray-400">Last Name</p>
               <p className="text-lg">{user?.lastName || 'N/A'}</p>
             </div>
-             <div className="bg-gray-700 p-4 rounded-lg col-span-1 md:col-span-2">
-              <p className="text-sm text-gray-400">Sui Wallet Address</p>
-              <p className="text-lg font-mono break-all">{user?.suiWalletAddress || 'Bağlı değil'}</p>
+          </div>
+
+          {/* Wallet Bilgileri */}
+          <div className="mt-8 space-y-4">
+            <h3 className="text-xl font-bold text-purple-300 mb-4">💳 Cüzdan Bilgileri</h3>
+
+            {/* Virtual Wallet Card */}
+            <div className="bg-gradient-to-r from-purple-900 to-purple-800 bg-opacity-50 border-2 border-purple-500 p-6 rounded-xl">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center">
+                    <span className="text-xl">🔐</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-purple-200">Virtual Wallet</h4>
+                    <p className="text-xs text-purple-300">Sponsorlu işlemler için otomatik oluşturuldu</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-purple-600 rounded-full text-xs font-bold">Varsayılan</span>
+              </div>
+              <div className="bg-black bg-opacity-30 p-3 rounded-lg">
+                <p className="text-xs text-gray-400 mb-1">Adres:</p>
+                <p className="text-sm font-mono text-white break-all">
+                  {user?.suiWalletAddress || 'Yükleniyor...'}
+                </p>
+              </div>
+              <div className="mt-3 p-3 bg-blue-900 bg-opacity-30 border border-blue-500 rounded-lg">
+                <p className="text-xs text-blue-200">
+                  <span className="font-bold">ℹ️ Bilgi:</span> Bu cüzdan oy verme, yorum yapma gibi işlemler için kullanılır.
+                  Gas ücretleri platform tarafından karşılanır, sizin SUI göndermenize gerek yok.
+                </p>
+              </div>
+            </div>
+
+            {/* Real Wallet Card */}
+            <div className={`bg-gradient-to-r ${user?.realWalletAddress ? 'from-green-900 to-green-800 border-green-500' : 'from-gray-800 to-gray-700 border-gray-600'} bg-opacity-50 border-2 p-6 rounded-xl`}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className={`w-10 h-10 ${user?.realWalletAddress ? 'bg-green-600' : 'bg-gray-600'} rounded-full flex items-center justify-center`}>
+                    <span className="text-xl">{user?.realWalletAddress ? '💎' : '⚪'}</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-green-200">Real Wallet</h4>
+                    <p className="text-xs text-green-300">Sui Wallet ile bağlandı</p>
+                  </div>
+                </div>
+                {user?.realWalletAddress ? (
+                  <span className="px-3 py-1 bg-green-600 rounded-full text-xs font-bold">✓ Bağlı</span>
+                ) : (
+                  <span className="px-3 py-1 bg-gray-600 rounded-full text-xs font-bold">Bağlı Değil</span>
+                )}
+              </div>
+              {user?.realWalletAddress ? (
+                <>
+                  <div className="bg-black bg-opacity-30 p-3 rounded-lg">
+                    <p className="text-xs text-gray-400 mb-1">Adres:</p>
+                    <p className="text-sm font-mono text-white break-all">
+                      {user.realWalletAddress}
+                    </p>
+                  </div>
+                  <div className="mt-3 p-3 bg-green-900 bg-opacity-30 border border-green-500 rounded-lg">
+                    <p className="text-xs text-green-200">
+                      <span className="font-bold">✅ Aktif:</span> Bu cüzdan NFT almak, bağış yapmak ve kendi varlıklarınızı yönetmek için kullanılır.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 p-3 bg-orange-900 bg-opacity-30 border border-orange-500 rounded-lg">
+                  <p className="text-xs text-orange-200">
+                    <span className="font-bold">⚠️ Opsiyonel:</span> Sui Wallet bağlayarak NFT'leri kendi cüzdanınızda saklayabilir ve
+                    bağış yapabilirsiniz. Üst menüden "Connect Wallet" butonuna tıklayın.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

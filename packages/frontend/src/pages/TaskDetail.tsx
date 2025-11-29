@@ -212,12 +212,14 @@ export default function TaskDetail() {
 
       if (response.data.success) {
         console.log('Oy başarıyla kaydedildi!');
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       }
     } catch (error: any) {
       console.error('Oy kullanılırken hata:', error);
       alert('Oy kullanılırken hata: ' + (error.response?.data?.error || error.message));
     } finally {
+      // İşlem başarılı da olsa başarısız da olsa, en güncel veriyi çekmek için invalidate et.
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ana sayfadaki listeyi de yenile
       setIsSubmitting(false);
     }
   };
@@ -349,61 +351,149 @@ export default function TaskDetail() {
 
         {/* Oylama Bölümü - Sadece VOTING durumunda göster */}
         {isVoting && (
-          <div className="bg-gradient-to-r from-yellow-900 to-yellow-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border-2 border-yellow-500 mb-8">
-            <h2 className="text-2xl font-bold text-yellow-100 mb-4">🗳️ Topluluk Oylaması</h2>
+          <div className="bg-gradient-to-r from-yellow-900 to-yellow-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border-2 border-yellow-500 mb-8 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-yellow-100">🗳️ Topluluk Oylaması</h2>
+              <div className="bg-yellow-700 bg-opacity-50 px-4 py-2 rounded-full border border-yellow-400">
+                <span className="text-yellow-100 font-bold text-lg">
+                  📊 {totalVotes} Toplam Oy
+                </span>
+              </div>
+            </div>
 
-            <div className="mb-6">
-              <div className="flex justify-between text-sm text-yellow-200 mb-2">
-                <span>Evet: {yesVotes} oy ({yesPercentage}%)</span>
-                <span>Hayır: {noVotes} oy ({100 - yesPercentage}%)</span>
+            {/* Oy İstatistikleri Kartları */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {/* Evet Oyları */}
+              <div className="bg-green-900 bg-opacity-40 border-2 border-green-500 rounded-xl p-4 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-green-300 font-bold text-sm">👍 EVET</span>
+                  <span className="text-green-200 text-xs font-semibold">{yesPercentage}%</span>
+                </div>
+                <div className="text-white font-bold text-3xl mb-1">{yesVotes}</div>
+                <div className="text-green-300 text-xs">
+                  {yesVotes === 1 ? 'kişi onayladı' : 'kişi onayladı'}
+                </div>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
+
+              {/* Hayır Oyları */}
+              <div className="bg-red-900 bg-opacity-40 border-2 border-red-500 rounded-xl p-4 backdrop-blur-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-red-300 font-bold text-sm">👎 HAYIR</span>
+                  <span className="text-red-200 text-xs font-semibold">{100 - yesPercentage}%</span>
+                </div>
+                <div className="text-white font-bold text-3xl mb-1">{noVotes}</div>
+                <div className="text-red-300 text-xs">
+                  {noVotes === 1 ? 'kişi reddetti' : 'kişi reddetti'}
+                </div>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mb-4">
+              <div className="flex justify-between text-xs text-yellow-200 mb-2">
+                <span className="font-semibold">Onay Oranı</span>
+                <span className="font-semibold">
+                  {yesPercentage >= 50 ? '✅ Onay Eşiği Geçildi' : `❌ %${50 - yesPercentage} daha gerekli`}
+                </span>
+              </div>
+              <div className="relative w-full bg-gray-700 rounded-full h-6 overflow-hidden shadow-inner">
                 <div
-                  className="bg-green-500 h-full transition-all duration-300"
+                  className="bg-gradient-to-r from-green-500 to-green-400 h-full transition-all duration-500 shadow-lg flex items-center justify-center"
                   style={{ width: `${yesPercentage}%` }}
-                ></div>
+                >
+                  {yesPercentage > 10 && (
+                    <span className="text-white text-xs font-bold">{yesPercentage}%</span>
+                  )}
+                </div>
+                {/* %50 İşareti */}
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 h-full w-0.5 bg-yellow-300 opacity-50"></div>
+                <div className="absolute -top-6 left-1/2 transform -translate-x-1/2">
+                  <span className="text-xs text-yellow-300 font-semibold">↓ %50</span>
+                </div>
               </div>
-              <p className="text-xs text-yellow-200 mt-2">
-                ⏰ Oylama bitiş: {task?.voting_end_date ? new Date(parseInt(task.voting_end_date.toString())).toLocaleString('tr-TR') : 'Bilinmiyor'}
+            </div>
+
+            {/* Oylama Bitiş Tarihi */}
+            <div className="mb-6 p-3 bg-yellow-800 bg-opacity-30 rounded-lg border border-yellow-600">
+              <p className="text-yellow-200 text-sm text-center">
+                ⏰ <strong>Oylama Bitiş:</strong> {task?.voting_end_date ? new Date(parseInt(task.voting_end_date.toString())).toLocaleString('tr-TR', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : 'Bilinmiyor'}
               </p>
             </div>
 
+            {/* Oy Verme Butonları veya Durum */}
             {hasVoted ? (
-              <div className="bg-yellow-700 bg-opacity-50 border border-yellow-400 rounded-lg p-4">
-                <p className="text-yellow-100 text-center font-semibold">
-                  ✅ Oyunuzu kullandınız: {userVote?.vote_type === 1 ? '👍 Evet' : '👎 Hayır'}
-                </p>
+              <div className="bg-gradient-to-r from-yellow-700 to-yellow-600 bg-opacity-50 border-2 border-yellow-400 rounded-xl p-6 shadow-lg">
+                <div className="text-center">
+                  <div className="text-4xl mb-2">✅</div>
+                  <p className="text-yellow-100 font-bold text-lg mb-1">
+                    Oyunuzu Kullandınız
+                  </p>
+                  <p className="text-yellow-200 text-sm">
+                    Tercihiniz: <span className="font-bold text-white">
+                      {userVote?.vote_type === 1 ? '👍 Evet' : '👎 Hayır'}
+                    </span>
+                  </p>
+                </div>
               </div>
             ) : (
-              <div className="flex gap-4">
-                <button
-                  onClick={() => handleVote(1)}
-                  disabled={isSubmitting || !user}
-                  className="flex-1 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'İşleniyor...' : '👍 Evet'}
-                </button>
-                <button
-                  onClick={() => handleVote(0)}
-                  disabled={isSubmitting || !user}
-                  className="flex-1 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'İşleniyor...' : '👎 Hayır'}
-                </button>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => handleVote(1)}
+                    disabled={isSubmitting || !user}
+                    className="group relative overflow-hidden px-6 py-5 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white rounded-xl font-bold text-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg"
+                  >
+                    <div className="relative z-10 flex items-center justify-center gap-2">
+                      <span className="text-2xl">👍</span>
+                      <span>{isSubmitting ? 'İşleniyor...' : 'Evet'}</span>
+                    </div>
+                    <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                  </button>
+                  <button
+                    onClick={() => handleVote(0)}
+                    disabled={isSubmitting || !user}
+                    className="group relative overflow-hidden px-6 py-5 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white rounded-xl font-bold text-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-lg"
+                  >
+                    <div className="relative z-10 flex items-center justify-center gap-2">
+                      <span className="text-2xl">👎</span>
+                      <span>{isSubmitting ? 'İşleniyor...' : 'Hayır'}</span>
+                    </div>
+                    <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                  </button>
+                </div>
+
+                {!user && (
+                  <div className="bg-orange-900 bg-opacity-30 border border-orange-400 rounded-lg p-3">
+                    <p className="text-orange-200 text-sm text-center font-semibold">
+                      ⚠️ Oy kullanmak için giriş yapmalısınız
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            {!user && (
-              <p className="text-sm text-yellow-300 mt-4 text-center">
-                ⚠️ Oy kullanmak için giriş yapmalısınız
-              </p>
-            )}
-
-            <div className="mt-4 p-3 bg-blue-500 bg-opacity-20 border border-blue-400 rounded-lg">
-              <p className="text-blue-200 text-sm">
-                💡 <strong>Onay Koşulu:</strong> %50'den fazla evet oy alırsa teklif onaylanır ve aktif hale gelir.
-                {task?.task_type === 1 && ` Onaylanırsa ${(task.budget_amount / 1_000_000_000).toFixed(2)} SUI bütçe teklif sahibine transfer edilir.`}
-              </p>
+            {/* Bilgilendirme */}
+            <div className="mt-6 p-4 bg-blue-900 bg-opacity-30 border border-blue-400 rounded-xl">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">💡</span>
+                <div className="flex-1">
+                  <p className="text-blue-200 text-sm font-semibold mb-1">Onay Koşulu</p>
+                  <p className="text-blue-300 text-xs leading-relaxed">
+                    Bu teklif <strong>%50'den fazla evet oy</strong> alırsa onaylanır ve aktif hale gelir.
+                    {task?.task_type === 1 && (
+                      <span className="block mt-1">
+                        💰 Onaylanırsa <strong className="text-green-300">{(task.budget_amount / 1_000_000_000).toFixed(2)} SUI</strong> bütçe teklif sahibine transfer edilir.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

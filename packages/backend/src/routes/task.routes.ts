@@ -73,21 +73,11 @@ router.post('/:taskId/vote-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid vote type' });
     }
 
-    // Kullanıcının wallet adresi olmalı (yoksa virtual wallet oluştur)
-    let userWalletAddress = user.suiWalletAddress;
+    // Kullanıcının wallet adresi olmalı (her kullanıcı giriş yaparken otomatik alır)
+    const userWalletAddress = user.suiWalletAddress;
 
     if (!userWalletAddress) {
-      // Eğer virtual wallet yoksa oluştur ve kaydet
-      const { Ed25519Keypair } = await import('@mysten/sui/keypairs/ed25519');
-      const keypair = Ed25519Keypair.generate();
-      userWalletAddress = keypair.getPublicKey().toSuiAddress();
-
-      await import('../config/database').then(({ default: prisma }) =>
-        prisma.user.update({
-          where: { id: user.id },
-          data: { suiWalletAddress: userWalletAddress },
-        })
-      );
+      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
     }
 
     const tx = new Transaction();
@@ -123,21 +113,11 @@ router.post('/:taskId/comment-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Kullanıcının wallet adresi olmalı (yoksa virtual wallet oluştur)
-    let userWalletAddress = user.suiWalletAddress;
+    // Kullanıcının wallet adresi olmalı (her kullanıcı giriş yaparken otomatik alır)
+    const userWalletAddress = user.suiWalletAddress;
 
     if (!userWalletAddress) {
-      // Eğer virtual wallet yoksa oluştur ve kaydet
-      const { Ed25519Keypair } = await import('@mysten/sui/keypairs/ed25519');
-      const keypair = Ed25519Keypair.generate();
-      userWalletAddress = keypair.getPublicKey().toSuiAddress();
-
-      await import('../config/database').then(({ default: prisma }) =>
-        prisma.user.update({
-          where: { id: user.id },
-          data: { suiWalletAddress: userWalletAddress },
-        })
-      );
+      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
     }
 
     const tx = new Transaction();

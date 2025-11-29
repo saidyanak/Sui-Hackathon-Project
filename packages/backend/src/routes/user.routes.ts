@@ -76,15 +76,18 @@ router.post('/mint-achievement', authMiddleware, async (req, res) => {
   }
 });
 
-// Update user wallet address
+// Update user's real wallet address (when they connect Sui Wallet)
 router.post('/wallet', authMiddleware, async (req, res) => {
   try {
     const { walletAddress } = req.body;
     const userId = (req.user as any).id;
 
+    // Real wallet is saved separately from virtual wallet
+    // suiWalletAddress = Virtual wallet (for sponsored transactions)
+    // realWalletAddress = Real wallet (user's connected wallet)
     await prisma.user.update({
       where: { id: userId },
-      data: { suiWalletAddress: walletAddress },
+      data: { realWalletAddress: walletAddress },
     });
 
     res.json({ success: true, walletAddress });

@@ -62,6 +62,8 @@ const oauth42Strategy = new OAuth2Strategy(
             firstName: intraUser.first_name,
             lastName: intraUser.last_name,
             avatar: intraUser.image?.link || intraUser.image_url,
+            // Ensure virtual wallet exists
+            suiWalletAddress: user.suiWalletAddress || generateVirtualWalletAddress(),
           },
         });
       } else {
@@ -72,6 +74,8 @@ const oauth42Strategy = new OAuth2Strategy(
             avatar: intraUser.image?.link || intraUser.image_url,
             firstName: intraUser.first_name,
             lastName: intraUser.last_name,
+            // Ensure virtual wallet exists
+            suiWalletAddress: user.suiWalletAddress || generateVirtualWalletAddress(),
           },
         });
       }
@@ -149,6 +153,8 @@ const googleStrategy = new GoogleStrategy(
             firstName: user.firstName || profile.name?.givenName,
             lastName: user.lastName || profile.name?.familyName,
             avatar: user.avatar || profile.photos?.[0]?.value,
+            // Ensure virtual wallet exists
+            suiWalletAddress: user.suiWalletAddress || generateVirtualWalletAddress(),
           },
         });
       } else {
@@ -159,6 +165,8 @@ const googleStrategy = new GoogleStrategy(
             firstName: profile.name?.givenName,
             lastName: profile.name?.familyName,
             avatar: profile.photos?.[0]?.value,
+            // Ensure virtual wallet exists
+            suiWalletAddress: user.suiWalletAddress || generateVirtualWalletAddress(),
           },
         });
       }

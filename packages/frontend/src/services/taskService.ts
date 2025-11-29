@@ -32,6 +32,12 @@ export const taskService = {
 
             if (taskObject.data?.content && 'fields' in taskObject.data.content) {
               const fields = taskObject.data.content.fields as any;
+
+              // Count votes
+              const votes = fields.votes || [];
+              const yesVotes = votes.filter((v: any) => v.fields?.vote_type === 1).length;
+              const noVotes = votes.filter((v: any) => v.fields?.vote_type === 0).length;
+
               return {
                 id: taskId,
                 title: fields.title,
@@ -44,6 +50,9 @@ export const taskService = {
                 participantsCount: fields.participants?.length || 0,
                 donationsCount: fields.donations?.length || 0,
                 commentsCount: fields.comments?.length || 0,
+                votes: votes,
+                yesVotes: yesVotes,
+                noVotes: noVotes,
                 startDate: fields.start_date,
                 endDate: fields.end_date,
                 createdAt: fields.created_at,

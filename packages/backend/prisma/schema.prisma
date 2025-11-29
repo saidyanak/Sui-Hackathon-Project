@@ -19,7 +19,11 @@ model User {
   intraId         Int?      @unique
   googleId        String?   @unique
 
+  // Virtual Wallet: Sponsorlu işlemler için otomatik oluşturulan adres (her kullanıcıda olur)
   suiWalletAddress String?
+
+  // Real Wallet: Kullanıcının Sui Wallet ile bağladığı gerçek cüzdan (opsiyonel)
+  realWalletAddress String?
 
   role            String    @default("USER")
 

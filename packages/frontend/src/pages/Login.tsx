@@ -38,9 +38,23 @@ export default function Login() {
       <div className="flex items-center justify-center bg-gradient-to-br from-[#071018] via-[#0A1A2F] to-[#071018] p-8">
         <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-10 shadow-2xl">
 
-          <h2 className="text-3xl font-bold text-center text-[#8BD7FF] mb-6">
+          <h2 className="text-3xl font-bold text-center text-[#8BD7FF] mb-4">
             Giriş Yap
           </h2>
+
+          {/* Virtual Wallet Bilgilendirme */}
+          <div className="mb-6 p-4 bg-purple-900 bg-opacity-30 border border-purple-400 rounded-lg">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">🔐</span>
+              <div className="flex-1">
+                <p className="text-xs text-purple-200 font-semibold mb-1">Otomatik Virtual Wallet</p>
+                <p className="text-xs text-purple-300 leading-relaxed">
+                  Giriş yaptığınızda size otomatik olarak bir <strong>Virtual Wallet</strong> oluşturulur.
+                  Oy verme ve yorum yapma gibi işlemlerde gas ücretleri platform tarafından karşılanır.
+                </p>
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-4">
 

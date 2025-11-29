@@ -10,7 +10,10 @@ interface User {
   intraId?: number;
   googleId?: string;
   role: string;
+  // Virtual Wallet: Auto-generated for sponsored transactions
   suiWalletAddress?: string;
+  // Real Wallet: User's connected Sui wallet (optional)
+  realWalletAddress?: string;
 }
 
 interface AuthState {

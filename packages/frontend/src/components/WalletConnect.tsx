@@ -2,30 +2,36 @@ import { ConnectButton, useCurrentAccount } from '@mysten/dapp-kit';
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { SuiClient, getFullnodeUrl } from '@mysten/sui.js/client';
+import { useAuthStore } from '../stores/authStore';
 
 const client = new SuiClient({ url: getFullnodeUrl('testnet') });
 
 export function WalletConnect() {
   const currentAccount = useCurrentAccount();
   const [balance, setBalance] = useState<number | null>(null);
+  const { user } = useAuthStore();
 
-  const address = currentAccount?.address;
+  const realWalletAddress = currentAccount?.address;
 
-  // Save wallet address to backend
+  // Save real wallet address to backend (separate from virtual wallet)
   useEffect(() => {
-    if (address) {
-      api.post('/api/user/wallet', { walletAddress: address }).catch((error) => {
-        console.error('Failed to save wallet address:', error);
-      });
+    if (realWalletAddress) {
+      api.post('/api/user/wallet', { walletAddress: realWalletAddress })
+        .then(() => {
+          console.log('✅ Real wallet saved:', realWalletAddress);
+        })
+        .catch((error) => {
+          console.error('Failed to save real wallet address:', error);
+        });
     }
-  }, [address]);
+  }, [realWalletAddress]);
 
-  // Fetch SUI balance
+  // Fetch SUI balance from real wallet
   useEffect(() => {
     const fetchBalance = async () => {
-      if (!address) return;
+      if (!realWalletAddress) return;
       try {
-        const result = await client.getBalance({ owner: address });
+        const result = await client.getBalance({ owner: realWalletAddress });
         const sui = Number(result.totalBalance) / 1_000_000_000; // mist → SUI
         setBalance(sui);
       } catch (err) {
@@ -34,13 +40,24 @@ export function WalletConnect() {
     };
 
     fetchBalance();
-  }, [address]);
+  }, [realWalletAddress]);
 
   return (
     <div className="flex items-center gap-4">
-      {address && (
+      {/* Virtual Wallet Info - Always shown when logged in */}
+      {user && (
+        <div className="flex flex-col items-end mr-2">
+          <span className="text-xs text-gray-400">Virtual Wallet</span>
+          <span className="text-xs text-purple-300 font-mono">
+            {user.suiWalletAddress ? `${user.suiWalletAddress.slice(0, 6)}...${user.suiWalletAddress.slice(-4)}` : 'N/A'}
+          </span>
+        </div>
+      )}
+
+      {/* Real Wallet Info - Only shown when wallet is connected */}
+      {realWalletAddress && (
         <div className="flex flex-col items-end">
-          {/* Bakiye gösterimi */}
+          <span className="text-xs text-green-400">Real Wallet 💎</span>
           <span className="text-sm text-purple-400 font-semibold">
             {balance !== null ? `${balance.toFixed(2)} SUI` : 'Yükleniyor...'}
           </span>
