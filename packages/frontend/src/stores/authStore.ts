@@ -10,6 +10,7 @@ interface User {
   intraId?: number;
   googleId?: string;
   role: string;
+  suiWalletAddress?: string;
 }
 
 interface AuthState {

@@ -83,12 +83,10 @@ export default function Home() {
 
   const getTaskTypeColor = (taskType: number) => {
     switch (taskType) {
-      case 0: // DONATION
-        return 'bg-green-500';
-      case 1: // PARTICIPATION
+      case 0: // PARTICIPATION
         return 'bg-blue-500';
-      case 2: // HYBRID
-        return 'bg-purple-500';
+      case 1: // PROPOSAL
+        return 'bg-orange-500';
       default:
         return 'bg-gray-500';
     }
@@ -96,12 +94,44 @@ export default function Home() {
 
   const getTaskTypeName = (taskType: number) => {
     switch (taskType) {
-      case 0: // DONATION
-        return 'Bağış';
-      case 1: // PARTICIPATION
+      case 0: // PARTICIPATION
         return 'Katılım';
-      case 2: // HYBRID
-        return 'Karma';
+      case 1: // PROPOSAL
+        return 'Proje';
+      default:
+        return 'Bilinmiyor';
+    }
+  };
+
+  const getTaskStatusColor = (status: number) => {
+    switch (status) {
+      case 0: // VOTING
+        return 'bg-yellow-500';
+      case 1: // ACTIVE
+        return 'bg-green-500';
+      case 2: // REJECTED
+        return 'bg-red-500';
+      case 3: // COMPLETED
+        return 'bg-gray-500';
+      case 4: // CANCELLED
+        return 'bg-gray-600';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  const getTaskStatusName = (status: number) => {
+    switch (status) {
+      case 0: // VOTING
+        return 'Oylamada';
+      case 1: // ACTIVE
+        return 'Aktif';
+      case 2: // REJECTED
+        return 'Reddedildi';
+      case 3: // COMPLETED
+        return 'Tamamlandı';
+      case 4: // CANCELLED
+        return 'İptal';
       default:
         return 'Bilinmiyor';
     }
@@ -109,9 +139,8 @@ export default function Home() {
 
   const filteredTasks = tasks.filter((task: Task) => {
     if (filter === 'all') return true;
-    if (filter === 'donation') return task.taskType === 0;
-    if (filter === 'participation') return task.taskType === 1;
-    if (filter === 'hybrid') return task.taskType === 2;
+    if (filter === 'participation') return task.taskType === 0;
+    if (filter === 'proposal') return task.taskType === 1;
     return true;
   });
 
@@ -257,16 +286,6 @@ export default function Home() {
               Tümü
             </button>
             <button
-              onClick={() => setFilter('donation')}
-              className={`px-4 py-2 rounded-lg font-semibold transition ${
-                filter === 'donation'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Bağış
-            </button>
-            <button
               onClick={() => setFilter('participation')}
               className={`px-4 py-2 rounded-lg font-semibold transition ${
                 filter === 'participation'
@@ -274,17 +293,17 @@ export default function Home() {
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              Katılım
+              👥 Katılım
             </button>
             <button
-              onClick={() => setFilter('hybrid')}
+              onClick={() => setFilter('proposal')}
               className={`px-4 py-2 rounded-lg font-semibold transition ${
-                filter === 'hybrid'
-                  ? 'bg-purple-500 text-white'
+                filter === 'proposal'
+                  ? 'bg-orange-500 text-white'
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              Karma
+              💰 Proje
             </button>
           </div>
         </div>
@@ -307,14 +326,23 @@ export default function Home() {
                 className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700 hover:border-purple-500 transition cursor-pointer transform hover:scale-105 shadow-lg"
                 onClick={() => navigate(`/tasks/${task.id}`)}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <span
-                    className={`${getTaskTypeColor(
-                      task.taskType
-                    )} text-white px-3 py-1 rounded-full text-xs font-bold shadow-md`}
-                  >
-                    {getTaskTypeName(task.taskType)}
-                  </span>
+                <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
+                  <div className="flex gap-2">
+                    <span
+                      className={`${getTaskTypeColor(
+                        task.taskType
+                      )} text-white px-3 py-1 rounded-full text-xs font-bold shadow-md`}
+                    >
+                      {getTaskTypeName(task.taskType)}
+                    </span>
+                    <span
+                      className={`${getTaskStatusColor(
+                        task.status
+                      )} text-white px-3 py-1 rounded-full text-xs font-bold shadow-md`}
+                    >
+                      {getTaskStatusName(task.status)}
+                    </span>
+                  </div>
                   <span className="text-xs text-gray-500">
                     {new Date(task.createdAt).toLocaleDateString('tr-TR')}
                   </span>

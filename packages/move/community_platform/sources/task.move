@@ -11,48 +11,48 @@ module community_platform::task {
 
     // Error codes
     const ENotTaskCreator: u64 = 1;
-    const ETaskAlreadyCompleted: u64 = 2;
+    const ETaskNotVoting: u64 = 2;
     const ETaskNotActive: u64 = 3;
     const EInvalidTaskType: u64 = 4;
     const EInsufficientAmount: u64 = 5;
     const ETaskNotCompleted: u64 = 6;
     const EAlreadyParticipant: u64 = 7;
+    const EAlreadyVoted: u64 = 8;
+    const EParticipantLimitReached: u64 = 9;
+    const ENotEnoughParticipants: u64 = 10;
 
     // Task types
-    const TASK_TYPE_DONATION: u8 = 0;
-    const TASK_TYPE_PARTICIPATION: u8 = 1;
-    const TASK_TYPE_HYBRID: u8 = 2;
+    const TASK_TYPE_PARTICIPATION: u8 = 0;   // Katılım (halısaha, hackathon vb)
+    const TASK_TYPE_PROPOSAL: u8 = 1;         // Para gerektiren proje (tost makinesi vb)
 
     // Task status
-    const TASK_STATUS_ACTIVE: u8 = 0;
-    const TASK_STATUS_COMPLETED: u8 = 1;
-    const TASK_STATUS_CANCELLED: u8 = 2;
+    const TASK_STATUS_VOTING: u8 = 0;        // Oylama aşamasında
+    const TASK_STATUS_ACTIVE: u8 = 1;        // Onaylandı, aktif
+    const TASK_STATUS_REJECTED: u8 = 2;      // Oylama reddedildi
+    const TASK_STATUS_COMPLETED: u8 = 3;     // Tamamlandı
+    const TASK_STATUS_CANCELLED: u8 = 4;     // İptal edildi
 
-    // Main Task object stored on-chain
+    // Vote types
+    const VOTE_YES: u8 = 1;
+    const VOTE_NO: u8 = 0;
+
+    // Main Task object
     public struct Task has key, store {
         id: UID,
         title: String,
         description: String,
-        task_type: u8,
-        status: u8,
+        task_type: u8,              // 0: PARTICIPATION, 1: PROPOSAL
+        status: u8,                 // 0: VOTING, 1: ACTIVE, 2: REJECTED, 3: COMPLETED, 4: CANCELLED
         creator: address,
-        target_amount: u64,
-        current_amount: u64,
-        balance: Balance<SUI>,
+        budget_amount: u64,         // Proposal için bütçe (MIST)
+        balance: Balance<SUI>,      // Toplanan bağışlar
         participants: vector<address>,
-        donations: vector<Donation>,
         comments: vector<Comment>,
-        start_date: u64,
-        end_date: u64,
+        votes: vector<Vote>,
+        min_participants: u64,
+        max_participants: u64,
+        voting_end_date: u64,       // Oylama bitiş tarihi
         created_at: u64,
-    }
-
-    // Donation record
-    public struct Donation has store, copy, drop {
-        donor: address,
-        amount: u64,
-        timestamp: u64,
-        message: String,
     }
 
     // Comment structure
@@ -62,21 +62,44 @@ module community_platform::task {
         timestamp: u64,
     }
 
+    // Vote structure
+    public struct Vote has store, copy, drop {
+        voter: address,
+        vote_type: u8,  // 1 = yes, 0 = no
+        timestamp: u64,
+    }
+
     // Events
     public struct TaskCreated has copy, drop {
         task_id: ID,
         creator: address,
         title: String,
         task_type: u8,
-        target_amount: u64,
+        budget_amount: u64,
+        voting_end_date: u64,
         timestamp: u64,
     }
 
-    public struct DonationReceived has copy, drop {
+    public struct VoteCast has copy, drop {
         task_id: ID,
-        donor: address,
-        amount: u64,
-        total_amount: u64,
+        voter: address,
+        vote_type: u8,
+        yes_votes: u64,
+        no_votes: u64,
+        timestamp: u64,
+    }
+
+    public struct TaskApproved has copy, drop {
+        task_id: ID,
+        yes_votes: u64,
+        no_votes: u64,
+        timestamp: u64,
+    }
+
+    public struct TaskRejected has copy, drop {
+        task_id: ID,
+        yes_votes: u64,
+        no_votes: u64,
         timestamp: u64,
     }
 
@@ -89,8 +112,7 @@ module community_platform::task {
 
     public struct TaskCompleted has copy, drop {
         task_id: ID,
-        completion_type: String, // "target_reached" or "manual"
-        final_amount: u64,
+        completion_type: String,
         total_participants: u64,
         timestamp: u64,
     }
@@ -108,23 +130,26 @@ module community_platform::task {
         timestamp: u64,
     }
 
-    public struct FundsWithdrawn has copy, drop {
+    public struct FundsTransferred has copy, drop {
         task_id: ID,
-        recipient: address,
+        from: address,
+        to: address,
         amount: u64,
         timestamp: u64,
     }
 
-    // Create a new task
+    // Create a new task (starts in VOTING status)
     public entry fun create_task(
         title: vector<u8>,
         description: vector<u8>,
         task_type: u8,
-        target_amount: u64,
-        end_date: u64,
+        budget_amount: u64,
+        min_participants: u64,
+        max_participants: u64,
+        voting_end_date: u64,
         ctx: &mut TxContext
     ) {
-        assert!(task_type <= TASK_TYPE_HYBRID, EInvalidTaskType);
+        assert!(task_type <= TASK_TYPE_PROPOSAL, EInvalidTaskType);
 
         let task_uid = object::new(ctx);
         let task_id = object::uid_to_inner(&task_uid);
@@ -135,16 +160,16 @@ module community_platform::task {
             title: string::utf8(title),
             description: string::utf8(description),
             task_type,
-            status: TASK_STATUS_ACTIVE,
+            status: TASK_STATUS_VOTING,  // Tüm tasklar oylama ile başlar
             creator: tx_context::sender(ctx),
-            target_amount,
-            current_amount: 0,
+            budget_amount,
             balance: balance::zero(),
             participants: vector::empty(),
-            donations: vector::empty(),
             comments: vector::empty(),
-            start_date: timestamp,
-            end_date,
+            votes: vector::empty(),
+            min_participants,
+            max_participants,
+            voting_end_date,
             created_at: timestamp,
         };
 
@@ -153,74 +178,157 @@ module community_platform::task {
             creator: tx_context::sender(ctx),
             title: task.title,
             task_type,
-            target_amount,
+            budget_amount,
+            voting_end_date,
             timestamp,
         });
 
         transfer::share_object(task);
     }
 
-    // Donate to a task
-    public entry fun donate(
+    // Vote on a task (any task type can be voted on)
+    public entry fun vote_task(
         task: &mut Task,
-        payment: Coin<SUI>,
-        message: vector<u8>,
+        voter: address, // Voter address (for sponsored transactions)
+        vote_type: u8, // 1 = yes, 0 = no
         ctx: &mut TxContext
     ) {
-        assert!(task.status == TASK_STATUS_ACTIVE, ETaskNotActive);
+        assert!(task.status == TASK_STATUS_VOTING, ETaskNotVoting);
 
-        let amount = coin::value(&payment);
-        let donor = tx_context::sender(ctx);
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
 
-        // Add to balance
-        let coin_balance = coin::into_balance(payment);
-        balance::join(&mut task.balance, coin_balance);
-
-        // Update amount
-        task.current_amount = task.current_amount + amount;
-
-        // Record donation
-        let donation = Donation {
-            donor,
-            amount,
-            timestamp,
-            message: string::utf8(message),
+        // Check if already voted
+        let mut i = 0;
+        let len = vector::length(&task.votes);
+        while (i < len) {
+            if (vector::borrow(&task.votes, i).voter == voter) {
+                abort EAlreadyVoted
+            };
+            i = i + 1;
         };
-        vector::push_back(&mut task.donations, donation);
 
-        event::emit(DonationReceived {
+        // Add vote
+        let vote = Vote {
+            voter,
+            vote_type,
+            timestamp,
+        };
+        vector::push_back(&mut task.votes, vote);
+
+        // Count votes
+        let (yes_votes, no_votes) = count_votes(task);
+
+        event::emit(VoteCast {
             task_id,
-            donor,
-            amount,
-            total_amount: task.current_amount,
+            voter,
+            vote_type,
+            yes_votes,
+            no_votes,
             timestamp,
         });
+    }
 
-        // Auto-complete if target reached
-        if (task.current_amount >= task.target_amount) {
-            task.status = TASK_STATUS_COMPLETED;
-            event::emit(TaskCompleted {
+    // Finalize voting (can be called after voting_end_date)
+    // For PROPOSAL: transfers budget from sponsor to creator if approved
+    // For PARTICIPATION: just activates the task if approved
+    public entry fun finalize_voting(
+        task: &mut Task,
+        sponsor_payment: Coin<SUI>, // Sponsor cüzdan buradan para gönderir (sadece PROPOSAL için)
+        ctx: &mut TxContext
+    ) {
+        assert!(task.status == TASK_STATUS_VOTING, ETaskNotVoting);
+
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+        let task_id = object::uid_to_inner(&task.id);
+
+        // Count votes
+        let (yes_votes, no_votes) = count_votes(task);
+        let total_votes = yes_votes + no_votes;
+
+        // Check if >50% voted yes
+        if (total_votes > 0 && yes_votes * 100 > total_votes * 50) {
+            // APPROVED
+            task.status = TASK_STATUS_ACTIVE;
+
+            event::emit(TaskApproved {
                 task_id,
-                completion_type: string::utf8(b"target_reached"),
-                final_amount: task.current_amount,
-                total_participants: vector::length(&task.participants),
+                yes_votes,
+                no_votes,
+                timestamp,
+            });
+
+            // If PROPOSAL, transfer budget from sponsor to creator
+            if (task.task_type == TASK_TYPE_PROPOSAL) {
+                let amount = coin::value(&sponsor_payment);
+                let sponsor = tx_context::sender(ctx);
+
+                transfer::public_transfer(sponsor_payment, task.creator);
+
+                event::emit(FundsTransferred {
+                    task_id,
+                    from: sponsor,
+                    to: task.creator,
+                    amount,
+                    timestamp,
+                });
+            } else {
+                // PARTICIPATION - return payment to sender
+                transfer::public_transfer(sponsor_payment, tx_context::sender(ctx));
+            };
+        } else {
+            // REJECTED
+            task.status = TASK_STATUS_REJECTED;
+
+            // Return payment to sponsor
+            transfer::public_transfer(sponsor_payment, tx_context::sender(ctx));
+
+            event::emit(TaskRejected {
+                task_id,
+                yes_votes,
+                no_votes,
                 timestamp,
             });
         };
     }
 
-    // Join a task as participant
+    // Count votes helper
+    fun count_votes(task: &Task): (u64, u64) {
+        let mut yes_count = 0;
+        let mut no_count = 0;
+        let mut i = 0;
+        let len = vector::length(&task.votes);
+
+        while (i < len) {
+            let vote = vector::borrow(&task.votes, i);
+            if (vote.vote_type == VOTE_YES) {
+                yes_count = yes_count + 1;
+            } else {
+                no_count = no_count + 1;
+            };
+            i = i + 1;
+        };
+
+        (yes_count, no_count)
+    }
+
+    // Join a participation task (only for PARTICIPATION type, only when ACTIVE)
     public entry fun join_task(
         task: &mut Task,
         ctx: &mut TxContext
     ) {
+        assert!(task.task_type == TASK_TYPE_PARTICIPATION, EInvalidTaskType);
         assert!(task.status == TASK_STATUS_ACTIVE, ETaskNotActive);
 
         let participant = tx_context::sender(ctx);
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
+        let current_count = vector::length(&task.participants);
+
+        // Check max participants limit
+        if (task.max_participants > 0) {
+            assert!(current_count < task.max_participants, EParticipantLimitReached);
+        };
 
         // Check if already participant
         let mut i = 0;
@@ -240,6 +348,17 @@ module community_platform::task {
             total_participants: vector::length(&task.participants),
             timestamp,
         });
+
+        // Auto-complete if max reached
+        if (task.max_participants > 0 && vector::length(&task.participants) >= task.max_participants) {
+            task.status = TASK_STATUS_COMPLETED;
+            event::emit(TaskCompleted {
+                task_id,
+                completion_type: string::utf8(b"participants_full"),
+                total_participants: vector::length(&task.participants),
+                timestamp,
+            });
+        };
     }
 
     // Add comment to task
@@ -268,13 +387,19 @@ module community_platform::task {
         });
     }
 
-    // Complete task manually (only creator)
+    // Complete task manually (only creator, only PARTICIPATION tasks)
     public entry fun complete_task(
         task: &mut Task,
         ctx: &mut TxContext
     ) {
         assert!(tx_context::sender(ctx) == task.creator, ENotTaskCreator);
         assert!(task.status == TASK_STATUS_ACTIVE, ETaskNotActive);
+        assert!(task.task_type == TASK_TYPE_PARTICIPATION, EInvalidTaskType);
+
+        // Check min participants requirement
+        if (task.min_participants > 0) {
+            assert!(vector::length(&task.participants) >= task.min_participants, ENotEnoughParticipants);
+        };
 
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
@@ -284,7 +409,6 @@ module community_platform::task {
         event::emit(TaskCompleted {
             task_id,
             completion_type: string::utf8(b"manual"),
-            final_amount: task.current_amount,
             total_participants: vector::length(&task.participants),
             timestamp,
         });
@@ -297,7 +421,6 @@ module community_platform::task {
         ctx: &mut TxContext
     ) {
         assert!(tx_context::sender(ctx) == task.creator, ENotTaskCreator);
-        assert!(task.status == TASK_STATUS_ACTIVE, ETaskNotActive);
 
         let timestamp = tx_context::epoch_timestamp_ms(ctx);
         let task_id = object::uid_to_inner(&task.id);
@@ -307,34 +430,6 @@ module community_platform::task {
         event::emit(TaskCancelled {
             task_id,
             reason: string::utf8(reason),
-            timestamp,
-        });
-    }
-
-    // Withdraw funds (only creator, only when completed)
-    public entry fun withdraw_funds(
-        task: &mut Task,
-        ctx: &mut TxContext
-    ) {
-        assert!(tx_context::sender(ctx) == task.creator, ENotTaskCreator);
-        assert!(task.status == TASK_STATUS_COMPLETED, ETaskNotCompleted);
-
-        let amount = balance::value(&task.balance);
-        assert!(amount > 0, EInsufficientAmount);
-
-        let timestamp = tx_context::epoch_timestamp_ms(ctx);
-        let task_id = object::uid_to_inner(&task.id);
-        let recipient = task.creator;
-
-        let withdrawn_balance = balance::withdraw_all(&mut task.balance);
-        let coin = coin::from_balance(withdrawn_balance, ctx);
-
-        transfer::public_transfer(coin, recipient);
-
-        event::emit(FundsWithdrawn {
-            task_id,
-            recipient,
-            amount,
             timestamp,
         });
     }
@@ -350,18 +445,13 @@ module community_platform::task {
         )
     }
 
-    public fun get_task_amounts(task: &Task): (u64, u64, u64) {
-        (
-            task.target_amount,
-            task.current_amount,
-            balance::value(&task.balance)
-        )
+    public fun get_task_budget(task: &Task): u64 {
+        task.budget_amount
     }
 
-    public fun get_task_dates(task: &Task): (u64, u64, u64) {
+    public fun get_task_dates(task: &Task): (u64, u64) {
         (
-            task.start_date,
-            task.end_date,
+            task.voting_end_date,
             task.created_at
         )
     }
@@ -370,12 +460,16 @@ module community_platform::task {
         vector::length(&task.participants)
     }
 
-    public fun get_donations_count(task: &Task): u64 {
-        vector::length(&task.donations)
-    }
-
     public fun get_comments_count(task: &Task): u64 {
         vector::length(&task.comments)
+    }
+
+    public fun get_votes_count(task: &Task): (u64, u64) {
+        count_votes(task)
+    }
+
+    public fun get_participant_limits(task: &Task): (u64, u64) {
+        (task.min_participants, task.max_participants)
     }
 
     public fun is_participant(task: &Task, addr: address): bool {
@@ -383,6 +477,18 @@ module community_platform::task {
         let len = vector::length(&task.participants);
         while (i < len) {
             if (*vector::borrow(&task.participants, i) == addr) {
+                return true
+            };
+            i = i + 1;
+        };
+        false
+    }
+
+    public fun has_voted(task: &Task, addr: address): bool {
+        let mut i = 0;
+        let len = vector::length(&task.votes);
+        while (i < len) {
+            if (vector::borrow(&task.votes, i).voter == addr) {
                 return true
             };
             i = i + 1;

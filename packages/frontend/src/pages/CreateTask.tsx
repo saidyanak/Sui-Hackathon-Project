@@ -10,9 +10,11 @@ export default function CreateTask() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    taskType: '0', // 0: DONATION, 1: PARTICIPATION, 2: HYBRID
-    targetAmount: '',
-    endDate: '',
+    taskType: '0', // 0: PARTICIPATION, 1: PROPOSAL
+    budgetAmount: '',
+    minParticipants: '',
+    maxParticipants: '',
+    votingEndDate: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -25,13 +27,15 @@ export default function CreateTask() {
     setError('');
 
     try {
-      // Backend'e sponsorlu transaction iste (backend gas ödeyecek!)
+      // Backend'e sponsorlu transaction iste (backend gas öder!)
       const response = await api.post('/api/tasks/create-sponsored', {
         title: formData.title,
         description: formData.description,
         taskType: parseInt(formData.taskType),
-        targetAmount: formData.taskType !== '1' ? formData.targetAmount : '0',
-        endDate: formData.endDate,
+        budgetAmount: formData.taskType === '1' ? formData.budgetAmount : '0',
+        minParticipants: formData.minParticipants || '0',
+        maxParticipants: formData.maxParticipants || '0',
+        votingEndDate: formData.votingEndDate,
       });
 
       if (response.data.success) {
@@ -46,15 +50,6 @@ export default function CreateTask() {
       console.error('Task oluşturma hatası:', err);
       setError('Task oluşturulurken hata: ' + (err.response?.data?.error || err.message));
       setLoading(false);
-    }
-  };
-
-  const getTaskTypeName = (type: string) => {
-    switch (type) {
-      case '0': return 'Bağış';
-      case '1': return 'Katılım';
-      case '2': return 'Karma';
-      default: return '';
     }
   };
 
@@ -80,7 +75,14 @@ export default function CreateTask() {
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-8 border border-gray-700">
-          <h2 className="text-3xl font-bold text-white mb-6">Yeni Teklif Oluştur</h2>
+          <h2 className="text-3xl font-bold text-white mb-2">Yeni Teklif Oluştur</h2>
+          <p className="text-gray-400 mb-6">Topluluk oylaması sonrası onaylanacak</p>
+
+          <div className="mb-6 p-4 bg-blue-500 bg-opacity-20 border border-blue-500 rounded-lg">
+            <p className="text-blue-200 text-sm">
+              💡 <strong>Oylama Sistemi:</strong> Tüm teklifler topluluk tarafından oylanır. %50+ evet oy alırsa onaylanır ve aktif hale gelir.
+            </p>
+          </div>
 
           <div className="mb-6 p-4 bg-green-500 bg-opacity-20 border border-green-500 rounded-lg">
             <p className="text-green-200">
@@ -95,6 +97,50 @@ export default function CreateTask() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Teklif Tipi */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-3">
+                Teklif Tipi *
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, taskType: '0' })}
+                  disabled={loading}
+                  className={`px-6 py-6 rounded-xl font-semibold transition border-2 ${
+                    formData.taskType === '0'
+                      ? 'bg-blue-500 text-white border-blue-400 shadow-lg'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border-gray-600'
+                  }`}
+                >
+                  <div className="text-2xl mb-2">👥</div>
+                  <div className="text-lg mb-1">Katılım</div>
+                  <div className="text-xs opacity-80">Etkinlik, Halısaha, Hackathon</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, taskType: '1' })}
+                  disabled={loading}
+                  className={`px-6 py-6 rounded-xl font-semibold transition border-2 ${
+                    formData.taskType === '1'
+                      ? 'bg-orange-500 text-white border-orange-400 shadow-lg'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600 border-gray-600'
+                  }`}
+                >
+                  <div className="text-2xl mb-2">💰</div>
+                  <div className="text-lg mb-1">Proje</div>
+                  <div className="text-xs opacity-80">Tost Makinesi, Kampüs İyileştirme</div>
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-gray-400 bg-gray-700 bg-opacity-50 p-3 rounded-lg">
+                {formData.taskType === '0'
+                  ? '👥 Katılım: Sadece katılımcı toplanır (para yok). Onaylanırsa insanlar katılabilir.'
+                  : '💰 Proje: Onaylanırsa sponsor cüzdandan size para transfer edilir ve projeyi yaparsınız.'
+                }
+              </p>
+            </div>
+
             {/* Başlık */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -106,7 +152,7 @@ export default function CreateTask() {
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="Teklifinize bir başlık verin"
+                placeholder={formData.taskType === '0' ? 'Örn: Voleybol Turnuvası' : 'Örn: Kampüse Tost Makinesi'}
                 disabled={loading}
               />
             </div>
@@ -122,81 +168,95 @@ export default function CreateTask() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={5}
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="Teklifinizi detaylı açıklayın"
+                placeholder="Teklifinizi detaylı açıklayın..."
                 disabled={loading}
               />
             </div>
 
-            {/* Teklif Tipi */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Teklif Tipi *
-              </label>
-              <div className="grid grid-cols-3 gap-4">
-                {['0', '1', '2'].map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, taskType: type })}
-                    disabled={loading}
-                    className={`px-4 py-3 rounded-lg font-semibold transition ${
-                      formData.taskType === type
-                        ? type === '0'
-                          ? 'bg-green-500 text-white'
-                          : type === '1'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-purple-500 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {getTaskTypeName(type)}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-sm text-gray-400">
-                {formData.taskType === '0' && '💰 Bağış: Sadece bağış toplanır'}
-                {formData.taskType === '1' && '👥 Katılım: Sadece katılımcı toplanır'}
-                {formData.taskType === '2' && '🔄 Karma: Hem bağış hem katılımcı'}
-              </p>
-            </div>
-
-            {/* Hedef Miktar (sadece DONATION ve HYBRID için) */}
-            {formData.taskType !== '1' && (
+            {/* Bütçe (sadece PROPOSAL için) */}
+            {formData.taskType === '1' && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Hedef Miktar (SUI) *
+                  Bütçe Miktarı (SUI) *
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   required
-                  value={formData.targetAmount}
-                  onChange={(e) => setFormData({ ...formData, targetAmount: e.target.value })}
+                  value={formData.budgetAmount}
+                  onChange={(e) => setFormData({ ...formData, budgetAmount: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="Örn: 10"
+                  placeholder="Örn: 100"
                   disabled={loading}
                 />
+                <p className="mt-2 text-xs text-gray-400">
+                  💡 Teklif onaylanırsa, bu miktar sponsor cüzdandan size transfer edilecek
+                </p>
               </div>
             )}
 
-            {/* Bitiş Tarihi */}
+            {/* Katılımcı Limitleri (PARTICIPATION için) */}
+            {formData.taskType === '0' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Minimum Katılımcı
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.minParticipants}
+                      onChange={(e) => setFormData({ ...formData, minParticipants: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="Örn: 10"
+                      disabled={loading}
+                    />
+                    <p className="mt-1 text-xs text-gray-400">Boş: sınırsız</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Maximum Katılımcı
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.maxParticipants}
+                      onChange={(e) => setFormData({ ...formData, maxParticipants: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="Örn: 22"
+                      disabled={loading}
+                    />
+                    <p className="mt-1 text-xs text-gray-400">Boş: sınırsız</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-400 bg-blue-500 bg-opacity-10 border border-blue-500 rounded-lg p-3">
+                  💡 <strong>Örnek:</strong> Halısaha için min: 10, max: 22
+                </p>
+              </div>
+            )}
+
+            {/* Oylama Bitiş Tarihi */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Bitiş Tarihi *
+                Oylama Bitiş Tarihi *
               </label>
               <input
                 type="datetime-local"
                 required
-                value={formData.endDate}
-                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                value={formData.votingEndDate}
+                onChange={(e) => setFormData({ ...formData, votingEndDate: e.target.value })}
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 disabled={loading}
               />
+              <p className="mt-2 text-xs text-gray-400">
+                ⏰ Bu tarihte oylama kapanır ve sonuç belirlenir (%50+ evet = onay)
+              </p>
             </div>
 
             {/* Submit Button */}
-            <div className="flex gap-4">
+            <div className="flex gap-4 pt-4">
               <button
                 type="button"
                 onClick={() => navigate('/')}
@@ -219,7 +279,7 @@ export default function CreateTask() {
                     Oluşturuluyor...
                   </span>
                 ) : (
-                  'Teklif Oluştur'
+                  'Teklif Oluştur (Oylamaya Gönder)'
                 )}
               </button>
             </div>

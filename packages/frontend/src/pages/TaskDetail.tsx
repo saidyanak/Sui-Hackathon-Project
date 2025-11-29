@@ -24,11 +24,18 @@ interface Comment {
   profile?: UserProfile;
 }
 
+interface Vote {
+  voter: string;
+  vote_type: number;
+  timestamp: string;
+}
+
 interface Task {
   id: string;
   title: string;
   description: string;
   task_type: number;
+  status: number;
   participants: string[];
   creator: {
     address: string;
@@ -36,6 +43,9 @@ interface Task {
     avatar?: string;
   };
   comments: Comment[];
+  votes: Vote[];
+  voting_end_date: number;
+  budget_amount: number;
   donations?: { donor: string; amount: number }[];
 }
 
@@ -50,7 +60,11 @@ const parseTask = (object: SuiObjectData): Omit<Task, 'creator' | 'comments'> & 
     title: fields.title,
     description: fields.description,
     task_type: fields.task_type,
+    status: fields.status,
     participants: fields.participants,
+    votes: fields.votes || [],
+    voting_end_date: fields.voting_end_date,
+    budget_amount: fields.budget_amount,
     creatorAddress: fields.creator,
     rawComments: fields.comments,
   };
@@ -117,7 +131,11 @@ export default function TaskDetail() {
         title: parsedData.title,
         description: parsedData.description,
         task_type: parsedData.task_type,
+        status: parsedData.status,
         participants: parsedData.participants,
+        votes: parsedData.votes,
+        voting_end_date: parsedData.voting_end_date,
+        budget_amount: parsedData.budget_amount,
         creator: {
           address: parsedData.creatorAddress,
           username: creatorProfile?.username,
@@ -176,6 +194,34 @@ export default function TaskDetail() {
     runMutation(tx, 'Successfully donated to task!');
   };
   
+  const handleVote = async (voteType: number) => {
+    if (!taskId) return;
+
+    const { user } = useAuthStore.getState();
+    if (!user) {
+      alert('Oy vermek için giriş yapmalısınız.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Backend'e sponsorlu oy isteği gönder
+      const response = await api.post(`/api/tasks/${taskId}/vote-sponsored`, {
+        voteType,
+      });
+
+      if (response.data.success) {
+        console.log('Oy başarıyla kaydedildi!');
+        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      }
+    } catch (error: any) {
+      console.error('Oy kullanılırken hata:', error);
+      alert('Oy kullanılırken hata: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() || !taskId) return;
@@ -206,9 +252,52 @@ export default function TaskDetail() {
     }
   };
 
+  // Helper functions
+  const getTaskStatusColor = (status: number) => {
+    switch (status) {
+      case 0: return 'bg-yellow-500';  // VOTING
+      case 1: return 'bg-green-500';   // ACTIVE
+      case 2: return 'bg-red-500';     // REJECTED
+      case 3: return 'bg-gray-500';    // COMPLETED
+      case 4: return 'bg-gray-600';    // CANCELLED
+      default: return 'bg-gray-500';
+    }
+  };
+
+  const getTaskStatusName = (status: number) => {
+    switch (status) {
+      case 0: return 'Oylamada';
+      case 1: return 'Aktif';
+      case 2: return 'Reddedildi';
+      case 3: return 'Tamamlandı';
+      case 4: return 'İptal';
+      default: return 'Bilinmiyor';
+    }
+  };
+
+  const getTaskTypeName = (taskType: number) => {
+    switch (taskType) {
+      case 0: return 'Katılım';
+      case 1: return 'Proje';
+      default: return 'Bilinmiyor';
+    }
+  };
+
+  // Vote counts
+  const yesVotes = task?.votes.filter(v => v.vote_type === 1).length || 0;
+  const noVotes = task?.votes.filter(v => v.vote_type === 0).length || 0;
+  const totalVotes = yesVotes + noVotes;
+  const yesPercentage = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
+
+  // Check if user has voted
+  const { user } = useAuthStore.getState();
+  const userVote = task?.votes.find(v => v.voter === user?.suiWalletAddress);
+  const hasVoted = !!userVote;
+
   const isParticipant = currentAccount && task?.participants.includes(currentAccount.address);
   const canJoin = task?.task_type === 1 || task?.task_type === 2;
   const canDonate = task?.task_type === 0 || task?.task_type === 2;
+  const isVoting = task?.status === 0;
 
   if (isLoading) {
     return (
@@ -242,14 +331,82 @@ export default function TaskDetail() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">{task?.title}</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 mb-4">
             {task?.creator.avatar && <img src={task.creator.avatar} alt={task.creator.username} className="w-8 h-8 rounded-full" />}
             <span className="text-gray-400">
               {task?.creator.username || 'Bilinmeyen Kullanıcı'} tarafından oluşturuldu
             </span>
           </div>
+          <div className="flex gap-2">
+            <span className={`${task?.task_type === 0 ? 'bg-blue-500' : 'bg-orange-500'} text-white px-3 py-1 rounded-full text-sm font-bold`}>
+              {getTaskTypeName(task?.task_type || 0)}
+            </span>
+            <span className={`${getTaskStatusColor(task?.status || 0)} text-white px-3 py-1 rounded-full text-sm font-bold`}>
+              {getTaskStatusName(task?.status || 0)}
+            </span>
+          </div>
         </div>
-        
+
+        {/* Oylama Bölümü - Sadece VOTING durumunda göster */}
+        {isVoting && (
+          <div className="bg-gradient-to-r from-yellow-900 to-yellow-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border-2 border-yellow-500 mb-8">
+            <h2 className="text-2xl font-bold text-yellow-100 mb-4">🗳️ Topluluk Oylaması</h2>
+
+            <div className="mb-6">
+              <div className="flex justify-between text-sm text-yellow-200 mb-2">
+                <span>Evet: {yesVotes} oy ({yesPercentage}%)</span>
+                <span>Hayır: {noVotes} oy ({100 - yesPercentage}%)</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-4 overflow-hidden">
+                <div
+                  className="bg-green-500 h-full transition-all duration-300"
+                  style={{ width: `${yesPercentage}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-yellow-200 mt-2">
+                ⏰ Oylama bitiş: {task?.voting_end_date ? new Date(parseInt(task.voting_end_date.toString())).toLocaleString('tr-TR') : 'Bilinmiyor'}
+              </p>
+            </div>
+
+            {hasVoted ? (
+              <div className="bg-yellow-700 bg-opacity-50 border border-yellow-400 rounded-lg p-4">
+                <p className="text-yellow-100 text-center font-semibold">
+                  ✅ Oyunuzu kullandınız: {userVote?.vote_type === 1 ? '👍 Evet' : '👎 Hayır'}
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => handleVote(1)}
+                  disabled={isSubmitting || !user}
+                  className="flex-1 px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'İşleniyor...' : '👍 Evet'}
+                </button>
+                <button
+                  onClick={() => handleVote(0)}
+                  disabled={isSubmitting || !user}
+                  className="flex-1 px-6 py-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? 'İşleniyor...' : '👎 Hayır'}
+                </button>
+              </div>
+            )}
+
+            {!user && (
+              <p className="text-sm text-yellow-300 mt-4 text-center">
+                ⚠️ Oy kullanmak için giriş yapmalısınız
+              </p>
+            )}
+
+            <div className="mt-4 p-3 bg-blue-500 bg-opacity-20 border border-blue-400 rounded-lg">
+              <p className="text-blue-200 text-sm">
+                💡 <strong>Onay Koşulu:</strong> %50'den fazla evet oy alırsa teklif onaylanır ve aktif hale gelir.
+                {task?.task_type === 1 && ` Onaylanırsa ${(task.budget_amount / 1_000_000_000).toFixed(2)} SUI bütçe teklif sahibine transfer edilir.`}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700 mb-8">
           <h2 className="text-2xl font-bold text-white mb-4">Açıklama</h2>
