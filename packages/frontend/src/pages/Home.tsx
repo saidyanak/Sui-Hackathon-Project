@@ -21,6 +21,7 @@ interface Task {
   startDate: number;
   endDate: number;
   createdAt: number;
+  donations?: Array<{ donor: string; amount: number }>;
 }
 
 
@@ -319,6 +320,21 @@ export default function Home() {
                         }}
                       ></div>
                     </div>
+                  </div>
+                )}
+
+                {/* Bağış yapanlar listesi */}
+                {task.donations && task.donations.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-bold text-green-400 mb-2">Bağış Yapanlar</h4>
+                    <ul className="text-xs text-gray-300 space-y-1">
+                      {task.donations.map((donation, idx) => (
+                        <li key={idx} className="flex justify-between">
+                          <span>{donation.donor.slice(0, 6)}...{donation.donor.slice(-4)}</span>
+                          <span className="font-semibold text-green-300">{(donation.amount / 1_000_000_000).toFixed(2)} SUI</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
