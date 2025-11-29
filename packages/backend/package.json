@@ -25,6 +25,7 @@
     "passport": "^0.6.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-oauth2": "^1.8.0",
+    "uuid": "^13.0.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -35,6 +36,7 @@
     "@types/passport": "^1.0.13",
     "@types/passport-google-oauth20": "^2.0.11",
     "@types/passport-oauth2": "^1.4.12",
+    "@types/uuid": "^10.0.0",
     "nodemon": "^3.0.1",
     "prisma": "^5.0.0",
     "ts-node": "^10.9.1",

@@ -1,9 +1,18 @@
+import React from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 
 export default function Profile() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const [achievements, setAchievements] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    import('../services/achievementService').then(({ achievementService }) => {
+      achievementService.getUserAchievements().then((data) => {
+        setAchievements(data);
+      });
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-800 to-gray-900 text-white">
@@ -46,6 +55,44 @@ export default function Profile() {
               <p className="text-sm text-gray-400">Sui Wallet Address</p>
               <p className="text-lg font-mono break-all">{user?.suiWalletAddress || 'Bağlı değil'}</p>
             </div>
+          </div>
+
+          {/* NFT Achievements */}
+          <div className="mt-10">
+            <h3 className="text-xl font-bold text-purple-300 mb-4">NFT Achievements</h3>
+            <button
+              className="mb-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold"
+              onClick={async () => {
+                const { achievementService } = await import('../services/achievementService');
+                await achievementService.mintAchievement({
+                  achievementType: 'FIRST_DONATION',
+                  taskId: 'test-task',
+                  tasksCompleted: 1,
+                  donationsMade: 1,
+                  totalDonatedAmount: 1000000000,
+                });
+                // Yeniden çek
+                achievementService.getUserAchievements().then((data) => {
+                  setAchievements(data);
+                });
+              }}
+            >NFT Achievement Mintle (Test)</button>
+            {achievements.length === 0 ? (
+              <p className="text-gray-400">Henüz NFT achievement yok.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {achievements.map((nft) => (
+                  <div key={nft.id} className="bg-gray-700 rounded-lg p-4 flex flex-col items-center">
+                    {nft.imageUrl && (
+                      <img src={nft.imageUrl} alt={nft.achievementType} className="w-24 h-24 rounded-lg mb-2" />
+                    )}
+                    <p className="font-bold text-purple-200 mb-1">{nft.achievementType}</p>
+                    <p className="text-xs text-gray-300 mb-2">Task: {nft.taskId || '-'}</p>
+                    <a href={nft.metadataUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400 underline">Metadata</a>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </main>
