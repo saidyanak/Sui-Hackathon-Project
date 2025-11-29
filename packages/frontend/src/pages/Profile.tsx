@@ -50,6 +50,7 @@ export default function Profile() {
   const [profile, setProfile] = useState<any>(null);
   const [nfts, setNFTs] = useState<any[]>([]);
   const [eligibleAchievements, setEligibleAchievements] = useState<any[]>([]);
+  const [claimedAchievements, setClaimedAchievements] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<number | null>(null);
   const [creatingProfile, setCreatingProfile] = useState(false);
@@ -59,14 +60,15 @@ export default function Profile() {
   const [profileId, setProfileId] = useState<string | null>(localStorage.getItem('userProfileId'));
 
   // Achievement eligibility hesapla - loadProfile'dan önce tanımlanmalı
-  const calculateEligibleAchievements = (profile: any) => {
+  const calculateEligibleAchievements = (profile: any, claimed: number[] = []) => {
     if (!profile?.stats) return [];
 
     const eligible: any[] = [];
-    const earnedIds = profile.achievements?.map((a: any) => a) || [];
+    // On-chain achievements + backend claimed achievements
+    const earnedIds = [...(profile.achievements?.map((a: any) => a) || []), ...claimed];
 
-    // İlk Görev
-    if (profile.stats.tasksCompleted >= 1 && !earnedIds.includes(0)) {
+    // İlk Görev (tasksParticipated veya tasksCompleted >= 1)
+    if ((profile.stats.tasksCompleted >= 1 || profile.stats.tasksParticipated >= 1) && !earnedIds.includes(0)) {
       eligible.push(ACHIEVEMENTS[0]);
     }
     // İlk Bağış
@@ -122,11 +124,15 @@ export default function Profile() {
         totalDonated: '0',
         reputationScore: 0,
       };
+      let claimed: number[] = [];
 
       try {
         const statsResponse = await api.get('/api/profile/stats');
         if (statsResponse.data.success) {
           backendStats = statsResponse.data.stats;
+          // Claimed achievements'ları al
+          claimed = statsResponse.data.claimedAchievements || [];
+          setClaimedAchievements(claimed);
           // Backend'den profileId geliyorsa güncelle
           if (statsResponse.data.profileId && statsResponse.data.profileId !== profileId) {
             localStorage.setItem('userProfileId', statsResponse.data.profileId);
@@ -174,7 +180,7 @@ export default function Profile() {
             }
 
             // Eligible achievements hesapla (merged stats ile)
-            const eligible = calculateEligibleAchievements({ ...onChainProfile, stats: mergedStats, reputationScore: backendStats.reputationScore });
+            const eligible = calculateEligibleAchievements({ ...onChainProfile, stats: mergedStats, reputationScore: backendStats.reputationScore }, claimed);
             setEligibleAchievements(eligible);
 
             setLoading(false);
@@ -215,7 +221,7 @@ export default function Profile() {
         setProfile(profileData);
         
         // Eligible achievements hesapla (backend stats ile)
-        const eligible = calculateEligibleAchievements(profileData);
+        const eligible = calculateEligibleAchievements(profileData, claimed);
         setEligibleAchievements(eligible);
       }
 
@@ -547,7 +553,9 @@ export default function Profile() {
               <h3 className="text-xl font-bold text-white mb-4">🎯 Tüm Achievement'lar</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {ACHIEVEMENTS.map((achievement) => {
-                  const isEarned = nfts.some((nft) => nft.achievementType === achievement.type);
+                  // On-chain NFT veya backend'de claimed ise earned
+                  const isEarned = nfts.some((nft) => nft.achievementType === achievement.type) || 
+                                   claimedAchievements.includes(achievement.type);
                   const isEligible = eligibleAchievements.some((a) => a.type === achievement.type);
 
                   return (

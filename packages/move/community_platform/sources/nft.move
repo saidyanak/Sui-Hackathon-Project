@@ -314,63 +314,63 @@ module community_platform::nft {
             (
                 string::utf8(b"First Task Completed"),
                 string::utf8(b"Completed your first task in the 42 community"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/first_task.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=first-task&backgroundColor=4ade80"),
                 string::utf8(b"Common")
             )
         } else if (achievement_type == ACHIEVEMENT_FIRST_DONATION) {
             (
                 string::utf8(b"First Donation"),
                 string::utf8(b"Made your first donation to support the community"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/first_donation.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=first-donation&backgroundColor=f472b6"),
                 string::utf8(b"Common")
             )
         } else if (achievement_type == ACHIEVEMENT_TASK_CREATOR) {
             (
                 string::utf8(b"Task Creator"),
                 string::utf8(b"Created your first community task"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/task_creator.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=task-creator&backgroundColor=60a5fa"),
                 string::utf8(b"Rare")
             )
         } else if (achievement_type == ACHIEVEMENT_GENEROUS_DONOR) {
             (
                 string::utf8(b"Generous Donor"),
                 string::utf8(b"Donated more than 10 SUI to community tasks"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/generous_donor.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=generous-donor&backgroundColor=38bdf8"),
                 string::utf8(b"Rare")
             )
         } else if (achievement_type == ACHIEVEMENT_ACTIVE_PARTICIPANT) {
             (
                 string::utf8(b"Active Participant"),
                 string::utf8(b"Participated in 10+ community tasks"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/active_participant.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=active-participant&backgroundColor=818cf8"),
                 string::utf8(b"Rare")
             )
         } else if (achievement_type == ACHIEVEMENT_COMMUNITY_LEADER) {
             (
                 string::utf8(b"Community Leader"),
                 string::utf8(b"Created 5+ successful community tasks"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/community_leader.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=community-leader&backgroundColor=a78bfa"),
                 string::utf8(b"Epic")
             )
         } else if (achievement_type == ACHIEVEMENT_SUPPORTER) {
             (
                 string::utf8(b"Community Supporter"),
                 string::utf8(b"Donated to 20+ different tasks"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/supporter.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=supporter&backgroundColor=c084fc"),
                 string::utf8(b"Epic")
             )
         } else if (achievement_type == ACHIEVEMENT_VOLUNTEER) {
             (
                 string::utf8(b"Super Volunteer"),
                 string::utf8(b"Completed 50+ participation tasks"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/volunteer.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=super-volunteer&backgroundColor=fb923c"),
                 string::utf8(b"Legendary")
             )
         } else if (achievement_type == ACHIEVEMENT_LEGENDARY) {
             (
                 string::utf8(b"Legendary 42 Contributor"),
                 string::utf8(b"Made an extraordinary contribution to the 42 Turkey community"),
-                string::utf8(b"https://42-community-nfts.s3.amazonaws.com/legendary.png"),
+                string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=legendary-42&backgroundColor=fbbf24"),
                 string::utf8(b"Legendary")
             )
         } else {
