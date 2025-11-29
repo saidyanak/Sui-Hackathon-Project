@@ -105,24 +105,16 @@ export default function Home() {
              <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                42 Community Platform
              </h1>
-         
+            
              <div className="flex items-center gap-4">
                {/* Wallet Connect */}
                <WalletConnect />
 
-               {/* LİDERLİK TABLOSU BUTONU */}
-               <button
-                 onClick={() => navigate('/leaderboard')}
-                 className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md"
-               >
-                 🏆 Liderlik Tablosu
-               </button>
-
-               {/* TEKLİF OLUŞTUR BUTONU */}
+               {/* 🟣 TEKLİF OLUŞTUR BUTONU */}
                <button
                  onClick={() => navigate('/tasks/create')}
                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md"
-               >
+                 >
                  + Teklif Oluştur
                </button>
 
