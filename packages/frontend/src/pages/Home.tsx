@@ -39,34 +39,51 @@ export default function Home() {
       try {
         const response = await taskService.getTasks();
 
-        const allDonorAddresses: string[] = [];
+        // Tüm creator ve donor adreslerini topla
+        const allAddresses: string[] = [];
         response.forEach((task: any) => {
+          if (task.creator) allAddresses.push(task.creator);
           if (task.donations) {
             task.donations.forEach((d: any) => {
-              if (d.donor) allDonorAddresses.push(d.donor);
+              if (d.donor) allAddresses.push(d.donor);
             });
           }
         });
 
-        let donorProfiles: { [address: string]: { username?: string } } = {};
-        if (allDonorAddresses.length > 0) {
+        // Unique adresler
+        const uniqueAddresses = [...new Set(allAddresses)];
+
+        // Profilleri çek
+        let profilesMap: { [address: string]: { username?: string; avatar?: string } } = {};
+        if (uniqueAddresses.length > 0) {
           const { userService } = await import("../services/userService");
-          const profiles = await userService.getProfilesByWalletAddresses(
-            allDonorAddresses
-          );
+          const profiles = await userService.getProfilesByWalletAddresses(uniqueAddresses);
           profiles.forEach((p: any) => {
-            donorProfiles[p.suiWalletAddress] = { username: p.username };
+            profilesMap[p.suiWalletAddress] = { 
+              username: p.username,
+              avatar: p.avatar 
+            };
           });
         }
 
+        // Task'lara profil bilgilerini ekle
         const tasksWithUsers = response.map((task: any) => {
+          // Creator bilgisi
+          const creatorProfile = profilesMap[task.creator];
+          
+          // Donations'a username ekle
           if (task.donations) {
             task.donations = task.donations.map((d: any) => ({
               ...d,
-              username: donorProfiles[d.donor]?.username,
+              username: profilesMap[d.donor]?.username,
             }));
           }
-          return task;
+          
+          return {
+            ...task,
+            creatorUsername: creatorProfile?.username,
+            creatorAvatar: creatorProfile?.avatar,
+          };
         });
 
         return tasksWithUsers;
@@ -137,16 +154,21 @@ export default function Home() {
 
         {/* Kullanıcı Profili */}
         <div
-          className="flex items-center gap-4 mb-6 cursor-pointer hover:opacity-80 transition"
+          className="flex items-center gap-4 mb-6 cursor-pointer hover:opacity-80 transition bg-white/5 rounded-xl p-3 hover:bg-white/10"
           onClick={() => navigate("/profile")}
         >
           <img
             src={user?.avatar}
             className="w-14 h-14 rounded-full border-2 border-[#2AA5FE]/60 shadow-md"
           />
-          <div>
-            <p className="font-semibold">{user?.username}</p>
+          <div className="flex-1">
+            <p className="font-semibold text-[#8BD7FF]">{user?.username}</p>
             <p className="text-gray-400 text-xs">{user?.email}</p>
+            {localStorage.getItem('userProfileId') && (
+              <p className="text-gray-500 text-[10px] font-mono mt-1">
+                ID: {localStorage.getItem('userProfileId')?.slice(0, 6)}...
+              </p>
+            )}
           </div>
         </div>
 

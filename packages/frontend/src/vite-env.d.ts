@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_API_URL: string;
   readonly VITE_SUI_PACKAGE_ID: string;
+  readonly VITE_PROFILE_REGISTRY_ID: string;
   // Add more env variables as needed
 }
 

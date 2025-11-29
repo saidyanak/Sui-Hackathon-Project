@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
 import { getFullnodeUrl } from '@mysten/sui/client';
+import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
 import Callback from './pages/Callback';
@@ -35,6 +36,29 @@ function App() {
       <SuiClientProvider networks={networks} defaultNetwork={network}>
         <WalletProvider autoConnect>
           <BrowserRouter>
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                duration: 4000,
+                style: {
+                  background: '#1a2332',
+                  color: '#fff',
+                  border: '1px solid rgba(42, 165, 254, 0.3)',
+                },
+                success: {
+                  iconTheme: {
+                    primary: '#10b981',
+                    secondary: '#fff',
+                  },
+                },
+                error: {
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#fff',
+                  },
+                },
+              }}
+            />
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<Callback />} />

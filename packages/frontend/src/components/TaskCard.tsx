@@ -13,21 +13,21 @@ export default function TaskCard({ task, getTaskStatusName }: TaskCardProps) {
   const [isExpired, setIsExpired] = useState(false);
 
   const calculateTimeLeft = () => {
-    // 1) endDate değeri kesinlikle sayıya dönüştürülüyor
-    const rawEnd = Number(task.endDate);
+    // voting_end_date veya endDate kullan
+    const rawEnd = Number(task.votingEndDate || task.endDate);
 
     // Eğer null, undefined veya geçersizse → süresi doldu
-    if (!rawEnd || isNaN(rawEnd)) {
-      setTimeText("Süresi doldu");
+    if (!rawEnd || isNaN(rawEnd) || rawEnd === 0) {
+      setTimeText("Süre belirtilmedi");
       setIsExpired(true);
       return;
     }
 
-    // 2) Saniye mi? Milisaniye mi?
-    // 2 milyardan küçükse → saniyedir → ms'ye çevir
-    const endDateMs = rawEnd < 2000000000 ? rawEnd * 1000 : rawEnd;
+    // Sui'de epoch_timestamp_ms kullanılıyor, yani milisaniye cinsinden
+    // Eğer değer çok küçükse (saniye cinsinden olabilir), ms'ye çevir
+    const endDateMs = rawEnd < 2000000000000 ? rawEnd : rawEnd;
 
-    // 3) Şu anki zaman farkı
+    // Şu anki zaman farkı
     const remaining = endDateMs - Date.now();
 
     // Süre dolduysa
@@ -37,7 +37,7 @@ export default function TaskCard({ task, getTaskStatusName }: TaskCardProps) {
       return;
     }
 
-    // 4) Kalan süre hesaplama
+    // Kalan süre hesaplama
     const totalSeconds = Math.floor(remaining / 1000);
 
     const days = Math.floor(totalSeconds / 86400);
@@ -45,24 +45,34 @@ export default function TaskCard({ task, getTaskStatusName }: TaskCardProps) {
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
 
-    // 5) Format: 1g 3s 12d 55sn
-    setTimeText(`${days}g ${hours}s ${minutes}d ${seconds}sn`);
+    // Format
+    if (days > 0) {
+      setTimeText(`${days}g ${hours}s ${minutes}d`);
+    } else if (hours > 0) {
+      setTimeText(`${hours}s ${minutes}d ${seconds}sn`);
+    } else {
+      setTimeText(`${minutes}d ${seconds}sn`);
+    }
     setIsExpired(false);
   };
 
-  // ⏳ Her saniye CANLI olarak tekrar hesaplanır
+  // Her saniye güncelle
   useEffect(() => {
     calculateTimeLeft();
     const interval = setInterval(calculateTimeLeft, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [task.votingEndDate, task.endDate]);
 
-  // Oylama yüzdeleri
-  const totalVotes = (task.yesVotes || 0) + (task.noVotes || 0);
-  const yesPercent =
-    totalVotes > 0 ? Math.round((task.yesVotes / totalVotes) * 100) : 0;
-  const noPercent =
-    totalVotes > 0 ? Math.round((task.noVotes / totalVotes) * 100) : 0;
+  // Oylama yüzdeleri - Number ile kesin dönüşüm
+  const yesVotes = Number(task.yesVotes) || 0;
+  const noVotes = Number(task.noVotes) || 0;
+  const totalVotes = yesVotes + noVotes;
+  const yesPercent = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
+  const noPercent = totalVotes > 0 ? Math.round((noVotes / totalVotes) * 100) : 0;
+
+  // Creator gösterimi - username varsa onu göster, yoksa kısaltılmış adres
+  const creatorDisplay = task.creatorUsername || 
+    (task.creator ? `${task.creator.slice(0, 6)}...${task.creator.slice(-4)}` : 'Bilinmiyor');
 
   return (
     <div
@@ -72,10 +82,15 @@ export default function TaskCard({ task, getTaskStatusName }: TaskCardProps) {
     >
       {/* Badgeler */}
       <div className="flex gap-2 mb-3">
-        <span className="px-3 py-1 bg-blue-500 text-xs rounded-full">
-          {task.taskType === 1 ? "Proje" : "Katılım"}
+        <span className={`px-3 py-1 text-xs rounded-full ${task.taskType === 1 ? 'bg-orange-500' : 'bg-blue-500'}`}>
+          {task.taskType === 1 ? "💰 Proje" : "🎮 Katılım"}
         </span>
-        <span className="px-3 py-1 bg-green-600 text-xs rounded-full">
+        <span className={`px-3 py-1 text-xs rounded-full ${
+          task.status === 0 ? 'bg-yellow-500' :
+          task.status === 1 ? 'bg-green-600' :
+          task.status === 2 ? 'bg-red-500' :
+          'bg-gray-500'
+        }`}>
           {getTaskStatusName(task.status)}
         </span>
       </div>
@@ -83,47 +98,72 @@ export default function TaskCard({ task, getTaskStatusName }: TaskCardProps) {
       {/* Başlık */}
       <h3 className="text-xl font-bold text-white mb-1">{task.title}</h3>
 
+      {/* Creator Info */}
+      <div className="flex items-center gap-2 mb-3">
+        {task.creatorAvatar && (
+          <img 
+            src={task.creatorAvatar} 
+            alt="" 
+            className="w-5 h-5 rounded-full"
+          />
+        )}
+        <span className="text-gray-400 text-xs">Oluşturan:</span>
+        <span className="text-[#2AA5FE] text-xs font-medium">
+          {creatorDisplay}
+        </span>
+      </div>
+
       {/* Açıklama */}
-      <p className="text-gray-300 text-sm mb-4 line-clamp-3">
+      <p className="text-gray-300 text-sm mb-4 line-clamp-2">
         {task.description}
       </p>
 
       {/* Süre */}
-      <p className="text-xs text-[#8BD7FF] mb-4">⏳ {timeText}</p>
+      <div className="flex items-center gap-2 mb-4">
+        <span className={`text-xs ${isExpired ? 'text-red-400' : 'text-[#8BD7FF]'}`}>
+          ⏳ {timeText}
+        </span>
+      </div>
 
-      {/* OYLAMA — Süre dolmamış ve status = 0 ise */}
-      {task.status === 0 && !isExpired && (
-        <div className="mb-4">
-          <p className="text-xs text-yellow-300 mb-1">🗳️ Oylama Devam Ediyor</p>
-
-          <div className="text-xs flex justify-between mb-1">
-            <span>👍 Evet: {yesPercent}%</span>
-            <span>👎 Hayır: {noPercent}%</span>
+      {/* OYLAMA — status = 0 (VOTING) ise */}
+      {task.status === 0 && (
+        <div className="mb-4 bg-white/5 rounded-lg p-3">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs text-yellow-300">🗳️ Oylama</span>
+            <span className="text-xs text-gray-400">{totalVotes} oy</span>
           </div>
 
-          {/* EVET Progress */}
-          <div className="h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
-            <div
-              className="h-full bg-green-400"
-              style={{ width: `${yesPercent}%` }}
-            />
+          {/* Combined Progress Bar */}
+          <div className="h-3 bg-gray-700 rounded-full overflow-hidden flex">
+            {yesPercent > 0 && (
+              <div
+                className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-300"
+                style={{ width: `${yesPercent}%` }}
+              />
+            )}
+            {noPercent > 0 && (
+              <div
+                className="h-full bg-gradient-to-r from-red-500 to-red-400 transition-all duration-300"
+                style={{ width: `${noPercent}%` }}
+              />
+            )}
           </div>
 
-          {/* HAYIR Progress */}
-          <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-red-400"
-              style={{ width: `${noPercent}%` }}
-            />
+          {/* Oy Sayıları */}
+          <div className="flex justify-between text-xs mt-2">
+            <span className="text-green-400">👍 Evet: {yesVotes} ({yesPercent}%)</span>
+            <span className="text-red-400">👎 Hayır: {noVotes} ({noPercent}%)</span>
           </div>
         </div>
       )}
 
       {/* Alt Bilgi */}
       <div className="flex justify-between text-xs text-gray-400 mt-4 border-t border-white/10 pt-4">
-        <span>💬 {task.commentsCount}</span>
-        <span>👥 {task.participantsCount}</span>
-        <span>💰 {task.donationsCount}</span>
+        <span>💬 {task.commentsCount || 0}</span>
+        <span>👥 {task.participantsCount || 0}</span>
+        {task.taskType === 1 && task.budgetAmount > 0 && (
+          <span>💰 {(task.budgetAmount / 1_000_000_000).toFixed(2)} SUI</span>
+        )}
       </div>
     </div>
   );

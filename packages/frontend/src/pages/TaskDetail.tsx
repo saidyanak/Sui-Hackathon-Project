@@ -7,6 +7,7 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { userService } from '../services/userService';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
+import { TaskCompletionClaim } from '../components/TaskCompletionClaim';
 
 const PACKAGE_ID = import.meta.env.VITE_SUI_PACKAGE_ID;
 
@@ -56,16 +57,29 @@ const parseTask = (object: SuiObjectData): Omit<Task, 'creator' | 'comments'> & 
   }
   const fields = object.content.fields as any;
   console.log('Raw fields.votes:', fields.votes); // <--- ADDED LOG
+  
+  // Votes'ları doğru şekilde parse et - vote_type number olarak kesinleştir
+  const parsedVotes = (fields.votes || []).map((v: any) => {
+    const voteFields = v.fields || v;
+    return {
+      voter: voteFields.voter,
+      vote_type: Number(voteFields.vote_type), // String veya number olabilir, kesin number yap
+      timestamp: voteFields.timestamp,
+    };
+  });
+  
+  console.log('Parsed votes:', parsedVotes);
+  
   return {
     id: fields.id.id,
     title: fields.title,
     description: fields.description,
-    task_type: fields.task_type,
-    status: fields.status,
+    task_type: Number(fields.task_type),
+    status: Number(fields.status),
     participants: fields.participants,
-    votes: fields.votes || [],
-    voting_end_date: fields.voting_end_date,
-    budget_amount: fields.budget_amount,
+    votes: parsedVotes,
+    voting_end_date: Number(fields.voting_end_date),
+    budget_amount: Number(fields.budget_amount),
     creatorAddress: fields.creator,
     rawComments: fields.comments,
   };
@@ -209,14 +223,30 @@ export default function TaskDetail() {
     });
   };
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     if (!taskId) return;
-    const tx = new TransactionBlock();
-    tx.moveCall({
-      target: `${PACKAGE_ID}::task::join_task`,
-      arguments: [tx.object(taskId)],
-    });
-    runMutation(tx, 'Successfully joined task!');
+
+    if (!user) {
+      alert('Katılmak için giriş yapmalısınız.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Backend'e sponsorlu katılma isteği gönder
+      const response = await api.post(`/api/tasks/${taskId}/join-sponsored`);
+
+      if (response.data.success) {
+        console.log('Göreve başarıyla katıldınız!');
+        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      }
+    } catch (error: any) {
+      console.error('Katılırken hata:', error);
+      alert('Katılırken hata: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDonate = () => {
@@ -241,11 +271,19 @@ export default function TaskDetail() {
       return;
     }
 
+    // ProfileId'yi localStorage'dan al
+    const profileId = localStorage.getItem('userProfileId');
+    if (!profileId) {
+      alert('Profil bulunamadı! Lütfen çıkış yapıp tekrar giriş yapın.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // Backend'e sponsorlu oy isteği gönder
       const response = await api.post(`/api/tasks/${taskId}/vote-sponsored`, {
         voteType,
+        profileId, // UserProfile object ID ekle
       });
 
       if (response.data.success) {
@@ -333,9 +371,10 @@ export default function TaskDetail() {
   const userVote = task?.votes.find(v => v.voter === user?.suiWalletAddress);
   const hasVoted = hasVotedStatus; // Use the result from the new query
 
-  const isParticipant = currentAccount && task?.participants.includes(currentAccount.address);
-  const canJoin = task?.task_type === 1 || task?.task_type === 2;
-  const canDonate = task?.task_type === 0 || task?.task_type === 2;
+  // Check if user is participant - use user's wallet address from auth store
+  const isParticipant = user?.suiWalletAddress && task?.participants.includes(user.suiWalletAddress);
+  const canJoin = task?.task_type === 0 && task?.status === 1; // Only PARTICIPATION type and ACTIVE status
+  const canDonate = task?.task_type === 1 || task?.task_type === 2;
   const isVoting = task?.status === 0;
 
   if (isLoading || isLoadingHasVoted) {
@@ -375,6 +414,15 @@ export default function TaskDetail() {
             <span className="text-gray-400">
               {task?.creator.username || 'Bilinmeyen Kullanıcı'} tarafından oluşturuldu
             </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/profile/${task?.creator.address}`);
+              }}
+              className="text-[#2AA5FE] hover:text-[#53bfff] text-xs font-mono hover:underline"
+            >
+              ({task?.creator.address.slice(0, 6)}...{task?.creator.address.slice(-4)})
+            </button>
           </div>
           <div className="flex gap-2">
             <span className={`${task?.task_type === 0 ? 'bg-blue-500' : 'bg-orange-500'} text-white px-3 py-1 rounded-full text-sm font-bold`}>
@@ -385,6 +433,23 @@ export default function TaskDetail() {
             </span>
           </div>
         </div>
+
+        {/* Task Completion Claim Component */}
+        {user && task && (
+          <TaskCompletionClaim
+            taskId={task.id}
+            profileId={localStorage.getItem('userProfileId') || ''}
+            taskTitle={task.title}
+            isParticipant={!!isParticipant}
+            isCreator={task.creator.address === user.suiWalletAddress}
+            taskType={task.task_type}
+            taskStatus={task.status}
+            onClaimed={() => {
+              queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+              setTimeout(() => navigate('/profile'), 1500);
+            }}
+          />
+        )}
 
         {/* Oylama Bölümü - Sadece VOTING durumunda göster */}
         {isVoting && (
@@ -561,7 +626,7 @@ export default function TaskDetail() {
             {canJoin && (
               <button
                 onClick={handleJoin}
-                disabled={!currentAccount || isParticipant || isSubmitting}
+                disabled={!user || isParticipant || isSubmitting}
                 className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isParticipant ? 'Zaten Katıldın' : (isSubmitting ? 'İşleniyor...' : 'Görevi Üstlen')}
@@ -575,11 +640,11 @@ export default function TaskDetail() {
                   onChange={(e) => setDonationAmount(e.target.value)}
                   placeholder="SUI Miktarı"
                   className="w-1/2 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
-                  disabled={!currentAccount || isSubmitting}
+                  disabled={!user || isSubmitting}
                 />
                 <button
                   onClick={handleDonate}
-                  disabled={!currentAccount || isSubmitting || !donationAmount || parseFloat(donationAmount) <= 0}
+                  disabled={!user || isSubmitting || !donationAmount || parseFloat(donationAmount) <= 0}
                   className="w-1/2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? 'İşleniyor...' : 'Bağış Yap'}
@@ -587,6 +652,14 @@ export default function TaskDetail() {
               </div>
             )}
           </div>
+          {!canJoin && !canDonate && task?.status === 0 && (
+            <p className="text-yellow-400 text-sm text-center mt-2">
+              ⏳ Bu teklif henüz oylamada. Onaylandıktan sonra katılabilirsiniz.
+            </p>
+          )}
+          <p className="text-green-400 text-sm text-center mt-4">
+            ⛽ Gas ücreti sponsor tarafından karşılanmaktadır.
+          </p>
         </div>
 
         <div className="mb-8">

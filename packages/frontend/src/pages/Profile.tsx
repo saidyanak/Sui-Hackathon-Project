@@ -1,138 +1,712 @@
-import React from 'react';
-import { useAuthStore } from '../stores/authStore';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { profileService } from '../services/profileService';
+import { useAuthStore } from '../stores/authStore';
+import { toast } from 'react-hot-toast';
+import api from '../services/api';
+
+// Achievement tanımları
+const ACHIEVEMENTS = [
+  { type: 0, name: 'İlk Görev', description: 'İlk görevinizi tamamladınız', icon: '🎯', rarity: 'Common', requirement: 'İlk görevi tamamla' },
+  { type: 1, name: 'İlk Bağış', description: 'İlk bağışınızı yaptınız', icon: '💝', rarity: 'Common', requirement: 'İlk bağışı yap' },
+  { type: 2, name: 'Görev Oluşturucu', description: 'İlk görevinizi oluşturdunuz', icon: '📝', rarity: 'Rare', requirement: '1 görev oluştur' },
+  { type: 3, name: 'Cömert Bağışçı', description: '10+ SUI bağışladınız', icon: '💎', rarity: 'Rare', requirement: '10 SUI bağışla' },
+  { type: 4, name: 'Aktif Katılımcı', description: '10+ göreve katıldınız', icon: '⚡', rarity: 'Rare', requirement: '10 göreve katıl' },
+  { type: 5, name: 'Topluluk Lideri', description: '5+ başarılı görev oluşturdunuz', icon: '👑', rarity: 'Epic', requirement: '5 onaylanan görev' },
+  { type: 6, name: 'Destekçi', description: '20+ farklı göreve bağış yaptınız', icon: '🌟', rarity: 'Epic', requirement: '20 bağış yap' },
+  { type: 7, name: 'Süper Gönüllü', description: '50+ görev tamamladınız', icon: '🏆', rarity: 'Legendary', requirement: '50 görev tamamla' },
+  { type: 8, name: 'Efsanevi 42', description: 'Olağanüstü topluluk katkısı', icon: '🔥', rarity: 'Legendary', requirement: '100 rep + 20 görev' },
+];
+
+// Rarity renkleri
+const RARITY_COLORS: { [key: string]: string } = {
+  Common: 'from-gray-400 to-gray-600',
+  Rare: 'from-blue-400 to-blue-600',
+  Epic: 'from-purple-400 to-purple-600',
+  Legendary: 'from-yellow-400 to-orange-600',
+};
+
+const RARITY_GLOW: { [key: string]: string } = {
+  Common: 'shadow-gray-500/30',
+  Rare: 'shadow-blue-500/50',
+  Epic: 'shadow-purple-500/50',
+  Legendary: 'shadow-yellow-500/50',
+};
+
+const RARITY_BG: { [key: string]: string } = {
+  Common: 'bg-gray-500/20',
+  Rare: 'bg-blue-500/20',
+  Epic: 'bg-purple-500/20',
+  Legendary: 'bg-yellow-500/20',
+};
 
 export default function Profile() {
-  const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [achievements, setAchievements] = React.useState<any[]>([]);
+  const { user } = useAuthStore();
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
-  React.useEffect(() => {
-    import('../services/achievementService').then(({ achievementService }) => {
-      achievementService.getUserAchievements().then((data) => {
-        setAchievements(data || []);
+  const [profile, setProfile] = useState<any>(null);
+  const [nfts, setNFTs] = useState<any[]>([]);
+  const [eligibleAchievements, setEligibleAchievements] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState<number | null>(null);
+  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [activeTab, setActiveTab] = useState<'achievements' | 'nfts' | 'stats'>('achievements');
+
+  // Profile ID'yi local storage'dan al
+  const [profileId, setProfileId] = useState<string | null>(localStorage.getItem('userProfileId'));
+
+  useEffect(() => {
+    loadProfile();
+  }, [user, currentAccount]);
+
+  const loadProfile = async () => {
+    setLoading(true);
+
+    try {
+      // Backend'den user stats'larını al
+      let backendStats = {
+        tasksCreated: 0,
+        tasksParticipated: 0,
+        votesCount: 0,
+        donationsCount: 0,
+        totalDonated: '0',
+        reputationScore: 0,
+      };
+
+      try {
+        const statsResponse = await api.get('/api/profile/stats');
+        if (statsResponse.data.success) {
+          backendStats = statsResponse.data.stats;
+          // Backend'den profileId geliyorsa güncelle
+          if (statsResponse.data.profileId && statsResponse.data.profileId !== profileId) {
+            localStorage.setItem('userProfileId', statsResponse.data.profileId);
+            setProfileId(statsResponse.data.profileId);
+          }
+        }
+      } catch (e) {
+        console.log('Backend stats not available:', e);
+      }
+
+      // 1. Önce on-chain profili dene (profileId varsa)
+      const currentProfileId = localStorage.getItem('userProfileId');
+      if (currentProfileId) {
+        try {
+          const onChainProfile = await profileService.getProfile(currentProfileId);
+          if (onChainProfile) {
+            // Backend stats'ları on-chain ile birleştir (backend'i öncelikli al)
+            const mergedStats = {
+              tasksCreated: backendStats.tasksCreated || onChainProfile.stats?.tasksCreated || 0,
+              tasksCompleted: onChainProfile.stats?.tasksCompleted || 0,
+              tasksParticipated: backendStats.tasksParticipated || onChainProfile.stats?.tasksParticipated || 0,
+              donationsMade: backendStats.donationsCount || onChainProfile.stats?.donationsMade || 0,
+              totalDonatedAmount: parseInt(backendStats.totalDonated) || onChainProfile.stats?.totalDonatedAmount || 0,
+              votesCast: backendStats.votesCount || onChainProfile.stats?.votesCast || 0,
+              proposalsApproved: onChainProfile.stats?.proposalsApproved || 0,
+            };
+
+            setProfile({
+              ...onChainProfile,
+              stats: mergedStats,
+              reputationScore: backendStats.reputationScore || onChainProfile.reputationScore || 0,
+              // Web2 bilgilerini ekle
+              username: user?.username || onChainProfile.displayName,
+              avatar: user?.avatar,
+              firstName: user?.firstName,
+            lastName: user?.lastName,
+            email: user?.email || onChainProfile.email,
+          });
+
+          // NFT'leri yükle
+          const walletAddress = currentAccount?.address || user?.suiWalletAddress;
+          if (walletAddress) {
+            const userNFTs = await profileService.getUserNFTs(walletAddress);
+            setNFTs(userNFTs);
+          }
+
+          // Eligible achievements hesapla (merged stats ile)
+          const eligible = calculateEligibleAchievements({ ...onChainProfile, stats: mergedStats, reputationScore: backendStats.reputationScore });
+          setEligibleAchievements(eligible);
+
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 2. On-chain profil yoksa, sadece Web2 bilgilerini ve backend stats'larını göster
+      if (user) {
+        const profileData = {
+          id: null,
+          displayName: user.username || `${user.firstName} ${user.lastName}` || user.email,
+          username: user.username,
+          email: user.email,
+          avatar: user.avatar,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          intraId: user.intraId?.toString() || 'N/A',
+          reputationScore: backendStats.reputationScore,
+          stats: {
+            tasksCreated: backendStats.tasksCreated,
+            tasksCompleted: 0,
+            tasksParticipated: backendStats.tasksParticipated,
+            donationsMade: backendStats.donationsCount,
+            totalDonatedAmount: parseInt(backendStats.totalDonated) || 0,
+            votesCast: backendStats.votesCount,
+            proposalsApproved: 0,
+          },
+          achievements: [],
+          isWeb2Only: true, // On-chain profil yok
+        };
+        setProfile(profileData);
+        
+        // Eligible achievements hesapla (backend stats ile)
+        const eligible = calculateEligibleAchievements(profileData);
+        setEligibleAchievements(eligible);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      toast.error('Profil yüklenirken hata oluştu');
+      setLoading(false);
+    }
+  };
+
+  // Achievement eligibility hesapla
+  const calculateEligibleAchievements = (profile: any) => {
+    if (!profile?.stats) return [];
+
+    const eligible: any[] = [];
+    const earnedIds = profile.achievements?.map((a: any) => a) || [];
+
+    // İlk Görev
+    if (profile.stats.tasksCompleted >= 1 && !earnedIds.includes(0)) {
+      eligible.push(ACHIEVEMENTS[0]);
+    }
+    // İlk Bağış
+    if (profile.stats.donationsMade >= 1 && !earnedIds.includes(1)) {
+      eligible.push(ACHIEVEMENTS[1]);
+    }
+    // Görev Oluşturucu
+    if (profile.stats.tasksCreated >= 1 && !earnedIds.includes(2)) {
+      eligible.push(ACHIEVEMENTS[2]);
+    }
+    // Cömert Bağışçı (10 SUI = 10_000_000_000 MIST)
+    if (profile.stats.totalDonatedAmount >= 10_000_000_000 && !earnedIds.includes(3)) {
+      eligible.push(ACHIEVEMENTS[3]);
+    }
+    // Aktif Katılımcı
+    if (profile.stats.tasksParticipated >= 10 && !earnedIds.includes(4)) {
+      eligible.push(ACHIEVEMENTS[4]);
+    }
+    // Topluluk Lideri
+    if (profile.stats.proposalsApproved >= 5 && !earnedIds.includes(5)) {
+      eligible.push(ACHIEVEMENTS[5]);
+    }
+    // Destekçi
+    if (profile.stats.donationsMade >= 20 && !earnedIds.includes(6)) {
+      eligible.push(ACHIEVEMENTS[6]);
+    }
+    // Süper Gönüllü
+    if (profile.stats.tasksCompleted >= 50 && !earnedIds.includes(7)) {
+      eligible.push(ACHIEVEMENTS[7]);
+    }
+    // Efsanevi
+    if (profile.reputationScore >= 100 && profile.stats.tasksCompleted >= 20 && !earnedIds.includes(8)) {
+      eligible.push(ACHIEVEMENTS[8]);
+    }
+
+    return eligible;
+  };
+
+  // On-chain profil oluştur
+  const handleCreateProfile = async () => {
+    if (!user) {
+      toast.error('Giriş yapmanız gerekiyor');
+      return;
+    }
+
+    try {
+      setCreatingProfile(true);
+
+      const response = await api.post('/api/profile/create-sponsored', {
+        intraId: user.intraId?.toString() || '',
+        email: user.email,
+        displayName: user.username || user.firstName || user.email,
       });
-    });
-  }, []);
+
+      if (response.data.success) {
+        toast.success('🎉 On-chain profil oluşturuldu!');
+        // ProfileId'yi kaydet
+        localStorage.setItem('userProfileId', response.data.profileId);
+        setProfileId(response.data.profileId);
+        // Profili yeniden yükle
+        setTimeout(() => loadProfile(), 1000);
+      } else {
+        toast.error(response.data.error || 'Profil oluşturulamadı');
+      }
+    } catch (error: any) {
+      console.error('Error creating profile:', error);
+      const errorMessage = error.response?.data?.details || error.response?.data?.error || 'Profil oluşturulamadı';
+      toast.error(errorMessage);
+    } finally {
+      setCreatingProfile(false);
+    }
+  };
+
+  const handleClaimAchievement = async (achievementType: number) => {
+    if (!profileId) {
+      toast.error('On-chain profil bulunamadı. Lütfen önce profil oluşturun.');
+      return;
+    }
+
+    try {
+      setClaiming(achievementType);
+
+      // Backend üzerinden sponsored NFT claim
+      const response = await api.post('/api/profile/claim-nft-sponsored', {
+        achievementType,
+        profileId,
+      });
+
+      if (response.data.success) {
+        toast.success('🎉 Achievement NFT kazandınız!');
+        setTimeout(() => loadProfile(), 2000);
+      } else {
+        toast.error(response.data.error || 'Claim işlemi başarısız');
+      }
+    } catch (error: any) {
+      console.error('Error claiming achievement:', error);
+      const errorMessage = error.response?.data?.details || error.response?.data?.error || 'Achievement claim edilemedi';
+      toast.error(errorMessage);
+    } finally {
+      setClaiming(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin h-16 w-16 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-cyan-300">Profil yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile && !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <h2 className="text-2xl font-bold text-red-400 mb-4">Giriş Yapılmadı</h2>
+          <p className="text-gray-400 mb-6">Profili görüntülemek için giriş yapmanız gerekiyor.</p>
+          <button
+            onClick={() => navigate('/login')}
+            className="bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold px-6 py-3 rounded-xl hover:opacity-90 transition"
+          >
+            Giriş Yap
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0A1A2F] via-[#0C2238] to-[#071018] text-white flex">
-
-      {/* LEFT SIDEBAR */}
-      <aside className="w-[380px] bg-white/10 backdrop-blur-xl border-r border-white/10 p-6 flex flex-col">
-
-        {/* Profile */}
-        <div className="flex items-center gap-4 mb-10">
-          {user?.avatar ? (
-            <img
-              src={user.avatar}
-              className="w-24 h-24 rounded-full border-4 border-[#2AA5FE]/70 shadow-md"
-            />
-          ) : (
-            <div className="w-24 h-24 rounded-full bg-gray-700 border-4 border-[#2AA5FE]/60" />
-          )}
-
-          <div>
-            <h2 className="text-3xl font-bold text-[#8BD7FF]">
-              {user?.firstName} {user?.lastName}
-            </h2>
-            <p className="text-gray-300 text-sm">{user?.email}</p>
-          </div>
-        </div>
-
-        {/* NFT Header */}
-        <div className="flex-1 flex flex-col justify-start mt-10">
-          <h3 className="text-lg font-semibold text-[#2AA5FE] mb-4">
-            NFT Koleksiyonu
-          </h3>
-
-          {/* NFT Grid */}
-          <div className="overflow-y-auto pr-2 flex-1">
-            {achievements.length === 0 ? (
-              <p className="text-gray-400">Henüz NFT yok.</p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {achievements.map((nft) => (
-                  <div
-                    key={nft.id}
-                    className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-3 transition transform hover:-translate-y-1 hover:border-[#2AA5FE] hover:shadow-[0_0_20px_rgba(42,165,254,0.4)]"
-                  >
-                    {nft.imageUrl && (
-                      <img
-                        src={nft.imageUrl}
-                        className="w-full h-24 rounded-lg object-cover mb-2"
-                      />
-                    )}
-                    <p className="text-sm font-semibold text-[#8BD7FF]">
-                      {nft.achievementType}
-                    </p>
-                    <a
-                      href={nft.metadataUrl}
-                      className="text-xs text-blue-300 underline"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Metadata
-                    </a>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-      </aside>
-
-      {/* MAIN FEED */}
-      <main className="flex-1 p-10 space-y-12 overflow-y-auto">
-
-        {/* TITLE + HOME BUTTON */}
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-3xl font-bold text-[#8BD7FF]">
-            Profil Akışı
-          </h1>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+      {/* Header */}
+      <header className="border-b border-white/10 backdrop-blur-sm bg-black/20">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <button
             onClick={() => navigate('/')}
-            className="text-gray-300 hover:text-white transition"
+            className="text-gray-400 hover:text-white transition flex items-center gap-2"
           >
             ← Ana Sayfa
           </button>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 text-transparent bg-clip-text">
+            Profilim
+          </h1>
+          <div className="w-20"></div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Profile Card */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 mb-8">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+            {/* Avatar */}
+            <div className="relative">
+              {profile.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.displayName}
+                  className="w-32 h-32 rounded-full border-4 border-cyan-500 shadow-lg shadow-cyan-500/30"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-5xl font-bold shadow-lg shadow-purple-500/30">
+                  {profile.displayName?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+              )}
+              {/* Reputation Badge */}
+              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-full px-4 py-1 text-sm font-bold text-black shadow-lg">
+                ⭐ {profile.reputationScore || 0}
+              </div>
+            </div>
+
+            {/* User Info */}
+            <div className="flex-1 text-center md:text-left">
+              <h2 className="text-3xl font-bold text-white mb-2">
+                {profile.displayName || profile.username || 'Kullanıcı'}
+              </h2>
+              
+              <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-gray-400 mb-4">
+                {profile.email && (
+                  <span className="flex items-center gap-1">
+                    📧 {profile.email}
+                  </span>
+                )}
+                {profile.intraId && profile.intraId !== 'N/A' && (
+                  <span className="flex items-center gap-1">
+                    🎓 42: {profile.intraId}
+                  </span>
+                )}
+                {user?.suiWalletAddress && (
+                  <span className="flex items-center gap-1 font-mono text-xs">
+                    💼 {user.suiWalletAddress.slice(0, 8)}...{user.suiWalletAddress.slice(-6)}
+                  </span>
+                )}
+              </div>
+
+              {/* On-chain status badge */}
+              {profile.isWeb2Only ? (
+                <div className="space-y-3">
+                  <div className="inline-flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/50 rounded-lg px-3 py-1 text-yellow-300 text-sm">
+                    ⚠️ On-chain profil henüz oluşturulmadı
+                  </div>
+                  <div>
+                    <button
+                      onClick={handleCreateProfile}
+                      disabled={creatingProfile}
+                      className="bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold px-6 py-2 rounded-xl hover:opacity-90 transition disabled:opacity-50"
+                    >
+                      {creatingProfile ? '⏳ Oluşturuluyor...' : '🚀 On-chain Profil Oluştur'}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">
+                      NFT almak için on-chain profil gerekli
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 bg-green-500/20 border border-green-500/50 rounded-lg px-3 py-1 text-green-300 text-sm">
+                  ✅ On-chain profil aktif
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* MY OFFERS */}
-        <section>
-          <h2 className="text-2xl font-extrabold text-[#2AA5FE] mb-4">Sunduğum Teklifler</h2>
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <StatCard
+            icon="📝"
+            label="Oluşturulan"
+            value={profile.stats?.tasksCreated || 0}
+            color="cyan"
+          />
+          <StatCard
+            icon="✅"
+            label="Tamamlanan"
+            value={profile.stats?.tasksCompleted || 0}
+            color="green"
+          />
+          <StatCard
+            icon="🙋"
+            label="Katılım"
+            value={profile.stats?.tasksParticipated || 0}
+            color="purple"
+          />
+          <StatCard
+            icon="🗳️"
+            label="Oy Kullanılan"
+            value={profile.stats?.votesCast || 0}
+            color="blue"
+          />
+          <StatCard
+            icon="💰"
+            label="Bağış Sayısı"
+            value={profile.stats?.donationsMade || 0}
+            color="orange"
+          />
+          <StatCard
+            icon="💎"
+            label="Toplam Bağış"
+            value={`${((profile.stats?.totalDonatedAmount || 0) / 1_000_000_000).toFixed(2)} SUI`}
+            color="pink"
+          />
+          <StatCard
+            icon="🏆"
+            label="Onaylanan Teklifler"
+            value={profile.stats?.proposalsApproved || 0}
+            color="yellow"
+          />
+          <StatCard
+            icon="🎖️"
+            label="NFT Sayısı"
+            value={nfts.length}
+            color="indigo"
+          />
+        </div>
 
-          {/* Sample Card – backend’den gelecek */}
-          <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 shadow-lg hover:border-[#2AA5FE] hover:shadow-[0_0_20px_rgba(42,165,254,0.4)] transition">
-            <h3 className="text-xl font-semibold text-[#8BD7FF] mb-2">
-              Topluluk Etkinlik Önerisi
-            </h3>
-            <p className="text-gray-300 mb-4">
-              Haftalık Sui hack geceleri düzenlemeyi teklif ettim.
-            </p>
-            <div className="flex justify-between text-sm text-gray-400">
-              <span>12 Oy</span>
-              <span>5 Yorum</span>
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b border-white/10 pb-2">
+          <button
+            onClick={() => setActiveTab('achievements')}
+            className={`px-4 py-2 rounded-t-lg transition ${
+              activeTab === 'achievements'
+                ? 'bg-white/10 text-cyan-400 border-b-2 border-cyan-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            🏆 Achievement'lar
+          </button>
+          <button
+            onClick={() => setActiveTab('nfts')}
+            className={`px-4 py-2 rounded-t-lg transition ${
+              activeTab === 'nfts'
+                ? 'bg-white/10 text-cyan-400 border-b-2 border-cyan-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            🖼️ NFT Koleksiyonu ({nfts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`px-4 py-2 rounded-t-lg transition ${
+              activeTab === 'stats'
+                ? 'bg-white/10 text-cyan-400 border-b-2 border-cyan-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            📊 Detaylı İstatistikler
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'achievements' && (
+          <div className="space-y-6">
+            {/* Claimable Achievements */}
+            {eligibleAchievements.length > 0 && (
+              <div>
+                <h3 className="text-xl font-bold text-yellow-400 mb-4 flex items-center gap-2">
+                  🎁 Kazanılabilir Achievement'lar
+                  <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full animate-pulse">
+                    {eligibleAchievements.length}
+                  </span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {eligibleAchievements.map((achievement) => (
+                    <div
+                      key={achievement.type}
+                      className={`bg-gradient-to-br ${RARITY_COLORS[achievement.rarity]} p-0.5 rounded-xl ${RARITY_GLOW[achievement.rarity]} shadow-lg animate-pulse`}
+                    >
+                      <div className="bg-slate-900 rounded-xl p-4 h-full">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className="text-3xl">{achievement.icon}</span>
+                          <div>
+                            <h4 className="font-bold text-white">{achievement.name}</h4>
+                            <span className={`text-xs ${RARITY_BG[achievement.rarity]} px-2 py-0.5 rounded-full`}>
+                              {achievement.rarity}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-gray-400 text-sm mb-4">{achievement.description}</p>
+                        <button
+                          onClick={() => handleClaimAchievement(achievement.type)}
+                          disabled={claiming === achievement.type}
+                          className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold py-2 rounded-lg hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {claiming === achievement.type ? 'Claim Ediliyor...' : '🏆 NFT Olarak Claim Et'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* All Achievements */}
+            <div>
+              <h3 className="text-xl font-bold text-white mb-4">🎯 Tüm Achievement'lar</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {ACHIEVEMENTS.map((achievement) => {
+                  const isEarned = nfts.some((nft) => nft.achievementType === achievement.type);
+                  const isEligible = eligibleAchievements.some((a) => a.type === achievement.type);
+
+                  return (
+                    <div
+                      key={achievement.type}
+                      className={`rounded-xl p-4 border transition ${
+                        isEarned
+                          ? `bg-gradient-to-br ${RARITY_COLORS[achievement.rarity]} bg-opacity-20 border-${achievement.rarity.toLowerCase()}-500/50`
+                          : isEligible
+                          ? 'bg-yellow-500/10 border-yellow-500/50'
+                          : 'bg-white/5 border-white/10 opacity-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className={`text-2xl ${!isEarned && !isEligible ? 'grayscale' : ''}`}>
+                          {achievement.icon}
+                        </span>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-white">{achievement.name}</h4>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${RARITY_BG[achievement.rarity]}`}>
+                            {achievement.rarity}
+                          </span>
+                        </div>
+                        {isEarned && <span className="text-green-400 text-xl">✅</span>}
+                      </div>
+                      <p className="text-gray-400 text-sm">{achievement.description}</p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        📋 {achievement.requirement}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </section>
+        )}
 
-        {/* COMMENTS & VOTES */}
-        <section>
-          <h2 className="text-2xl font-extrabold text-[#2AA5FE] mb-4">Yorumlarım & Oylarım</h2>
+        {activeTab === 'nfts' && (
+          <div>
+            {nfts.length === 0 ? (
+              <div className="bg-white/5 rounded-xl border border-white/10 p-12 text-center">
+                <span className="text-6xl mb-4 block">🖼️</span>
+                <h3 className="text-xl font-bold text-white mb-2">Henüz NFT Yok</h3>
+                <p className="text-gray-400">
+                  Achievement'ları claim ederek NFT kazanabilirsiniz!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {nfts.map((nft) => {
+                  const rarity = nft.metadata?.rarity || 'Common';
+                  return (
+                    <div
+                      key={nft.id}
+                      className={`bg-gradient-to-br ${RARITY_COLORS[rarity]} p-0.5 rounded-xl ${RARITY_GLOW[rarity]} shadow-lg hover:scale-105 transition transform`}
+                    >
+                      <div className="bg-slate-900 rounded-xl p-4">
+                        {nft.imageUrl && (
+                          <img
+                            src={nft.imageUrl}
+                            alt={nft.name}
+                            className="w-full h-32 rounded-lg object-cover mb-3"
+                          />
+                        )}
+                        <h4 className="font-bold text-white text-sm truncate">{nft.name}</h4>
+                        <p className="text-xs text-gray-400 truncate">{nft.description}</p>
+                        <div className="flex justify-between items-center mt-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${RARITY_BG[rarity]}`}>
+                            {rarity}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(nft.earnedAt).toLocaleDateString('tr-TR')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-          <div className="space-y-4">
-            <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl p-5 hover:border-[#2AA5FE] hover:shadow-[0_0_15px_rgba(42,165,254,0.3)] transition">
-              <p className="text-gray-300 mb-2">
-                “Bu teklif topluluk için harika bir katkı olur!”
-              </p>
-              <p className="text-gray-500 text-sm">• 2 gün önce oy kullandı</p>
+        {activeTab === 'stats' && (
+          <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+            <h3 className="text-xl font-bold text-white mb-6">📊 Detaylı İstatistikler</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Görev İstatistikleri */}
+              <div className="bg-white/5 rounded-xl p-4">
+                <h4 className="font-semibold text-cyan-400 mb-4">📝 Görev İstatistikleri</h4>
+                <div className="space-y-3">
+                  <StatRow label="Oluşturulan Görevler" value={profile.stats?.tasksCreated || 0} />
+                  <StatRow label="Tamamlanan Görevler" value={profile.stats?.tasksCompleted || 0} />
+                  <StatRow label="Katılınan Görevler" value={profile.stats?.tasksParticipated || 0} />
+                  <StatRow label="Onaylanan Teklifler" value={profile.stats?.proposalsApproved || 0} />
+                </div>
+              </div>
+
+              {/* Bağış İstatistikleri */}
+              <div className="bg-white/5 rounded-xl p-4">
+                <h4 className="font-semibold text-orange-400 mb-4">💰 Bağış İstatistikleri</h4>
+                <div className="space-y-3">
+                  <StatRow label="Toplam Bağış Sayısı" value={profile.stats?.donationsMade || 0} />
+                  <StatRow
+                    label="Toplam Bağış Miktarı"
+                    value={`${((profile.stats?.totalDonatedAmount || 0) / 1_000_000_000).toFixed(4)} SUI`}
+                  />
+                </div>
+              </div>
+
+              {/* Oylama İstatistikleri */}
+              <div className="bg-white/5 rounded-xl p-4">
+                <h4 className="font-semibold text-purple-400 mb-4">🗳️ Oylama İstatistikleri</h4>
+                <div className="space-y-3">
+                  <StatRow label="Kullanılan Oy Sayısı" value={profile.stats?.votesCast || 0} />
+                </div>
+              </div>
+
+              {/* Genel */}
+              <div className="bg-white/5 rounded-xl p-4">
+                <h4 className="font-semibold text-yellow-400 mb-4">⭐ Genel</h4>
+                <div className="space-y-3">
+                  <StatRow label="İtibar Puanı" value={profile.reputationScore || 0} />
+                  <StatRow label="NFT Sayısı" value={nfts.length} />
+                  <StatRow label="Achievement Sayısı" value={profile.achievements?.length || 0} />
+                </div>
+              </div>
             </div>
           </div>
-        </section>
-
+        )}
       </main>
+    </div>
+  );
+}
+
+// StatCard component
+function StatCard({ icon, label, value, color }: { icon: string; label: string; value: string | number; color: string }) {
+  const colorClasses: { [key: string]: string } = {
+    cyan: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30 text-cyan-400',
+    green: 'from-green-500/20 to-green-500/5 border-green-500/30 text-green-400',
+    purple: 'from-purple-500/20 to-purple-500/5 border-purple-500/30 text-purple-400',
+    blue: 'from-blue-500/20 to-blue-500/5 border-blue-500/30 text-blue-400',
+    orange: 'from-orange-500/20 to-orange-500/5 border-orange-500/30 text-orange-400',
+    pink: 'from-pink-500/20 to-pink-500/5 border-pink-500/30 text-pink-400',
+    yellow: 'from-yellow-500/20 to-yellow-500/5 border-yellow-500/30 text-yellow-400',
+    indigo: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30 text-indigo-400',
+  };
+
+  return (
+    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-xl p-4`}>
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-xl">{icon}</span>
+        <span className="text-xs text-gray-400">{label}</span>
+      </div>
+      <p className={`text-2xl font-bold ${colorClasses[color].split(' ').pop()}`}>{value}</p>
+    </div>
+  );
+}
+
+// StatRow component
+function StatRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-gray-400 text-sm">{label}</span>
+      <span className="text-white font-semibold">{value}</span>
     </div>
   );
 }

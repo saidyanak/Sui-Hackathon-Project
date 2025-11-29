@@ -33,6 +33,7 @@ try {
 const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
 
 export const PACKAGE_ID = process.env.VITE_SUI_PACKAGE_ID || '';
+export const PROFILE_REGISTRY_ID = process.env.VITE_PROFILE_REGISTRY_ID || '';
 
 /**
  * Execute a sponsored transaction

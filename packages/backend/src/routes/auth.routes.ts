@@ -40,7 +40,15 @@ router.get(
 
 // Get current user
 router.get('/me', authMiddleware, (req, res) => {
-  res.json({ user: req.user });
+  const user = req.user as any;
+  res.json({
+    user: {
+      ...user,
+      profileId: user.profileId || null,
+      // BigInt'i string'e çevir
+      totalDonated: user.totalDonated?.toString() || '0',
+    },
+  });
 });
 
 // Logout

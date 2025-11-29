@@ -17,11 +17,20 @@ model User {
   intraId           Int?             @unique
   googleId          String?          @unique
   suiWalletAddress  String?
+  profileId         String?          // On-chain UserProfile object ID
   role              String           @default("USER")
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   realWalletAddress String?
   nftAchievements   NFTAchievement[]
+
+  // Stats - Backend'de takip edilen istatistikler
+  tasksCreated      Int              @default(0)
+  tasksParticipated Int              @default(0)
+  votesCount        Int              @default(0)
+  donationsCount    Int              @default(0)
+  totalDonated      BigInt           @default(0)  // MIST cinsinden
+  reputationScore   Int              @default(0)
 }
 
 model NFTAchievement {

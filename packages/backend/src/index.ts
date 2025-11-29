@@ -7,8 +7,14 @@ import passport from './config/passport.config';
 import authRoutes from './routes/auth.routes';
 import taskRoutes from './routes/task.routes';
 import userRoutes from './routes/user.routes';
+import profileRoutes from './routes/profile.routes';
 
 dotenv.config();
+
+// BigInt'i JSON'da serialize edebilmek için global polyfill
+(BigInt.prototype as any).toJSON = function() {
+  return this.toString();
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,10 +26,13 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting
+// Rate limiting - Daha esnek limitler
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 200, // limit each IP to 200 requests per minute
+  message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
@@ -50,6 +59,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
