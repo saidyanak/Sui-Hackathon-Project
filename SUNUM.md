@@ -214,168 +214,48 @@ public entry fun create_task_sponsored(
 }
 ```
 
-#### Oylama Sistemi:
+#### Oylama Sistemi (özet)
 
-```move
-// Sponsorlu oy kullanma
-public entry fun vote_task_sponsored(
-    task: &mut Task,           // Shared object reference
-    voter_address: address,     // Gerçek oyu kullanan
-    vote_type: u8,             // 1 = YES, 0 = NO
-    ctx: &mut TxContext
-) {
-    // Zaten oy kullandı mı?
-    assert!(!has_voted(task, voter_address), EAlreadyVoted);
-    
-    // Oyu kaydet
-    vector::push_back(&mut task.votes, Vote {
-        voter: voter_address,
-        vote_type,
-        timestamp,
-    });
-    
-    // Event emit et (frontend dinler)
-    event::emit(VoteCast { ... });
-}
-```
+- Aynı adres bir task için ikinci kez oy veremez (EAlreadyVoted koruması).
+- Oylar `VoteCast` event’leri ile takip edilir ve frontend tarafından toplanır.
 
-#### Bağış Sistemi:
+#### Bağış Sistemi (özet)
 
-```move
-// SUI coin ile bağış
-public entry fun donate_to_task(
-    task: &mut Task,
-    donation: Coin<SUI>,       // Gerçek SUI coin
-    message: vector<u8>,
-    ctx: &mut TxContext
-) {
-    let amount = coin::value(&donation);
-    
-    // Balance'a ekle
-    let donation_balance = coin::into_balance(donation);
-    balance::join(&mut task.balance, donation_balance);
-    
-    // Bağış kaydı
-    vector::push_back(&mut task.donations, DonationRecord {
-        donor: tx_context::sender(ctx),
-        amount,
-        message: string::utf8(message),
-        timestamp,
-    });
-}
-```
+- SUI coin ile bağış yapılır; miktar task’ın bakiyesine eklenir.
+- Bağış kayıtları listeye eklenir ve event’lerle izlenir.
 
 ---
 
-### 3. NFT Modülü (`nft.move`)
+### NFT Modülü (Özet)
 
-**Amaç:** Achievement NFT'leri mint etmek ve kullanıcılara vermek.
+Amaç: Achievement NFT’leri mint etmek ve kullanıcılara vermek.
 
-#### Achievement Türleri:
+#### Achievement Türleri (örnekler)
 
-```move
-const ACHIEVEMENT_FIRST_TASK: u8 = 0;        // İlk task tamamlama
-const ACHIEVEMENT_FIRST_DONATION: u8 = 1;    // İlk bağış
-const ACHIEVEMENT_TASK_CREATOR: u8 = 2;      // Task oluşturucu
-const ACHIEVEMENT_GENEROUS_DONOR: u8 = 3;    // 10+ SUI bağışladı
-const ACHIEVEMENT_ACTIVE_PARTICIPANT: u8 = 4; // 10+ task'a katıldı
-const ACHIEVEMENT_COMMUNITY_LEADER: u8 = 5;  // 5+ başarılı task
-const ACHIEVEMENT_SUPPORTER: u8 = 6;         // 20+ farklı task'a bağış
-const ACHIEVEMENT_VOLUNTEER: u8 = 7;         // 50+ participation task
-const ACHIEVEMENT_LEGENDARY: u8 = 8;         // Efsanevi katkı
-```
+- İlk task, ilk bağış, task oluşturucu, aktif katılımcı, topluluk lideri, destekçi, gönüllü, efsanevi katkı.
 
-#### NFT Struct:
+#### NFT Yapısı (anlatım)
 
-```move
-public struct AchievementNFT has key, store {
-    id: UID,
-    name: String,
-    description: String,
-    achievement_type: u8,
-    image_url: Url,           // DiceBear API ile dinamik görsel
-    earned_at: u64,
-    recipient: address,
-    metadata: AchievementMetadata,
-}
+- NFT; ad, açıklama, tür, görsel URL, kazanılma zamanı ve alıcının adresini içerir.
+- Metadata’da rarity (Common/Rare/Epic/Legendary) ve kullanıcının istatistikleri bulunur.
 
-public struct AchievementMetadata has store, copy, drop {
-    rarity: String,           // "Common", "Rare", "Epic", "Legendary"
-    tasks_completed: u64,
-    donations_made: u64,
-    total_donated_amount: u64,
-    reputation_score: u64,
-}
-```
+#### Sponsorlu NFT Mint (sorun ve çözüm)
 
-#### Sponsorlu NFT Mint (Owned Object Sorunu Çözümü):
+- Sorun: Sponsor cüzdan, kullanıcının owned `UserProfile` nesnesine erişemez.
+- Çözüm: `mint_achievement_direct_sponsored` ile profil nesnesi olmadan, backend eligibility doğrulayarak NFT’yi doğrudan kullanıcı adresine mint ve transfer et.
 
-**Problem:** Sponsor wallet, kullanıcının UserProfile'ına (owned object) erişemez.
+#### NFT Görselleri (DiceBear)
 
-**Çözüm:** `mint_achievement_direct_sponsored` - UserProfile kullanmadan mint:
-
-```move
-// Backend eligibility kontrolü yapar, sadece mint işlemi on-chain
-public entry fun mint_achievement_direct_sponsored(
-    recipient_address: address,
-    achievement_type: u8,
-    // Backend'den gelen stats
-    tasks_completed: u64,
-    donations_made: u64,
-    total_donated: u64,
-    reputation_score: u64,
-    ctx: &mut TxContext
-) {
-    let (name, description, image_url, rarity) = get_achievement_details(achievement_type);
-    
-    let nft = AchievementNFT {
-        id: object::new(ctx),
-        name,
-        description,
-        achievement_type,
-        image_url,
-        earned_at: tx_context::epoch_timestamp_ms(ctx),
-        recipient: recipient_address,
-        metadata: AchievementMetadata { ... },
-    };
-    
-    event::emit(NFTMinted { ... });
-    
-    // NFT'yi kullanıcıya gönder
-    transfer::public_transfer(nft, recipient_address);
-}
-```
-
-#### NFT Görselleri (DiceBear API):
-
-```move
-// Rarity'ye göre renk kodlaması
-fun get_achievement_details(achievement_type: u8): (String, String, String, String) {
-    if (achievement_type == ACHIEVEMENT_FIRST_TASK) {
-        (
-            string::utf8(b"First Task Completed"),
-            string::utf8(b"Completed your first task"),
-            string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=first-task&backgroundColor=4ade80"),  // Yeşil - Common
-            string::utf8(b"Common")
-        )
-    } else if (achievement_type == ACHIEVEMENT_COMMUNITY_LEADER) {
-        (
-            string::utf8(b"Community Leader"),
-            string::utf8(b"Created 5+ successful tasks"),
-            string::utf8(b"https://api.dicebear.com/7.x/shapes/svg?seed=community-leader&backgroundColor=a78bfa"),  // Mor - Epic
-            string::utf8(b"Epic")
-        )
-    } // ...
-}
-```
+- Görseller DiceBear API’den üretilir; rarity’ye göre arka plan renkleri farklıdır.
+- Bu yaklaşım depolama ve barındırma yükünü azaltır, görsel üretimini kolaylaştırır.
 
 ---
 
 ## 🔐 zkLogin Entegrasyonu
 
-### Akış:
+### Akış
 
-```
+```text
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │   Kullanıcı  │────►│ Google/42    │────►│   Backend    │
 │   (Frontend) │     │ OAuth Login  │     │   Callback   │
@@ -400,7 +280,7 @@ fun get_achievement_details(achievement_type: u8): (String, String, String, Stri
                                           └──────────────┘
 ```
 
-### Avantajlar:
+### Avantajlar
 
 | Geleneksel Wallet | zkLogin |
 |-------------------|---------|
@@ -415,7 +295,7 @@ fun get_achievement_details(achievement_type: u8): (String, String, String, Stri
 
 ### Neden Gerekli?
 
-```
+```text
 Normal Transaction:
 Kullanıcı → Gas Fee (SUI gerekli) → İşlem
 
@@ -485,20 +365,22 @@ router.post('/create-task-sponsored', authMiddleware, async (req, res) => {
 
 ## 🎨 Frontend & Backend
 
-### Frontend Stack:
+### Frontend Stack
+
 - **React + Vite** - Hızlı geliştirme
 - **TailwindCSS** - Modern UI
 - **@mysten/dapp-kit** - Sui wallet bağlantısı
 - **@tanstack/react-query** - Data fetching
 - **Zustand** - State management
 
-### Backend Stack:
+### Backend Stack
+
 - **Express.js** - API server
 - **Prisma + SQLite** - Veritabanı
 - **Passport.js** - OAuth authentication
 - **@mysten/sui** - Blockchain interaction
 
-### Veritabanı Şeması:
+### Veritabanı Şeması
 
 ```prisma
 model User {
@@ -535,7 +417,7 @@ model NFTAchievement {
 
 ## 📊 Event Sistemi
 
-### Blockchain Events (Move):
+### Blockchain Events (Move)
 
 ```move
 // Task oluşturulduğunda
@@ -569,7 +451,7 @@ public struct NFTMinted has copy, drop {
 }
 ```
 
-### Frontend Event Dinleme:
+### Frontend Event Dinleme
 
 ```typescript
 // taskService.ts
@@ -600,9 +482,9 @@ async getTasks() {
 
 ## 🔄 Owned vs Shared Objects
 
-### Karşılaştırma:
+### Karşılaştırma
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    OWNED OBJECTS                             │
 │  ┌─────────────────┐                                        │
@@ -640,7 +522,7 @@ async getTasks() {
 
 ## 🎯 Sonuç
 
-### Başarılar:
+### Başarılar
 
 ✅ **zkLogin ile Kolay Giriş** - Wallet olmadan blockchain kullanımı
 ✅ **Sponsored Transactions** - Gas ücreti olmadan işlem
@@ -648,13 +530,13 @@ async getTasks() {
 ✅ **NFT Achievement Sistemi** - Gamification
 ✅ **On-chain + Off-chain Hibrit** - Performans ve güvenlik dengesi
 
-### Öğrenilen Dersler:
+### Öğrenilen Dersler
 
 1. **Owned Object Erişim Sorunu** → Direct mint fonksiyonu ile çözüldü
 2. **Package ID Değişimi** → Eski veriler blockchain'de kalır ama yeni kontrat görmez
 3. **Event-based Data Fetching** → Task'ları event'lerden okumak en verimli yöntem
 
-### Gelecek Geliştirmeler:
+### Gelecek Geliştirmeler
 
 - [ ] Real-time notifications (WebSocket)
 - [ ] Task deadline reminder
@@ -668,10 +550,10 @@ async getTasks() {
 
 | Kaynak | Link |
 |--------|------|
-| Sui Move Docs | https://docs.sui.io/build |
-| zkLogin Guide | https://docs.sui.io/concepts/cryptography/zklogin |
-| Sui TypeScript SDK | https://sdk.mystenlabs.com/typescript |
-| DiceBear API | https://dicebear.com/styles/shapes |
+| Sui Move Docs | <https://docs.sui.io/build> |
+| zkLogin Guide | <https://docs.sui.io/concepts/cryptography/zklogin> |
+| Sui TypeScript SDK | <https://sdk.mystenlabs.com/typescript> |
+| DiceBear API | <https://dicebear.com/styles/shapes> |
 
 ---
 
@@ -685,4 +567,4 @@ async getTasks() {
 
 ---
 
-*42 Community Platform - Built with ❤️ on Sui Blockchain*
+_42 Community Platform - Built with ❤️ on Sui Blockchain_
