@@ -159,305 +159,187 @@ export default function Home() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
-      {/* Header */}
-       <header className="bg-gray-800 bg-opacity-50 backdrop-blur-lg border-b border-gray-700 sticky top-0 z-10">
-         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-           <div className="flex justify-between items-center">
-             <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-               42 Community Platform
-             </h1>
-            
-             <div className="flex items-center gap-4">
-               {/* Wallet Connect */}
-               <WalletConnect />
+return (
+  <div className="min-h-screen flex bg-gradient-to-br from-[#0A1A2F] via-[#0C2238] to-[#071018] text-white">
 
-               {/* 🟣 TEKLİF OLUŞTUR BUTONU */}
-               <button
-                 onClick={() => navigate('/tasks/create')}
-                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition shadow-md"
-                 >
-                 + Teklif Oluştur
-               </button>
+    {/* 🌊 SOL SİDEBAR - Sui Temalı */}
+    <aside className="w-[320px] border-r border-white/10 bg-white/5 backdrop-blur-xl p-6 flex flex-col shadow-xl">
 
-               {/* Kullanıcı bilgisi */}
-               <button onClick={() => navigate('/profile')} className="flex items-center gap-3 text-left hover:bg-gray-700 p-2 rounded-lg transition">
-                 {user?.avatar && (
-                   <img
-                     src={user.avatar}
-                     alt={user.username}
-                     className="w-10 h-10 rounded-full border-2 border-purple-500"
-                   />
-                 )}
-                 <div className="text-white">
-                   <p className="font-semibold">{user?.username || user?.email}</p>
-                   <p className="text-xs text-gray-400">{user?.role}</p>
-                 </div>
-               </button>
-               
-               <button
-                 onClick={handleLogout}
-                 className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
-               >
-                 Çıkış
-               </button>
-             </div>
-           </div>
-         </div>
-       </header>
+      {/* Başlık */}
+      <h1 className="text-xl font-bold text-[#8BD7FF] mb-8">
+        42 Community Platform
+      </h1>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Section */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-200 text-sm font-medium">Toplam Teklif</p>
-                <h3 className="text-4xl font-bold text-white mt-2">{tasks.length}</h3>
-              </div>
-              <div className="bg-white bg-opacity-20 rounded-full p-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-200 text-sm font-medium">Toplam Bağış</p>
-                <h3 className="text-4xl font-bold text-white mt-2">
-                  {tasks.reduce((sum, t) => sum + (t.currentAmount / 1_000_000_000), 0).toFixed(2)} SUI
-                </h3>
-              </div>
-              <div className="bg-white bg-opacity-20 rounded-full p-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-200 text-sm font-medium">Toplam Katılımcı</p>
-                <h3 className="text-4xl font-bold text-white mt-2">
-                  {tasks.reduce((sum, t) => sum + t.participantsCount, 0)}
-                </h3>
-              </div>
-              <div className="bg-white bg-opacity-20 rounded-full p-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gradient-to-br from-pink-500 to-pink-700 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-pink-200 text-sm font-medium">Toplam Yorum</p>
-                <h3 className="text-4xl font-bold text-white mt-2">
-                  {tasks.reduce((sum, t) => sum + t.commentsCount, 0)}
-                </h3>
-              </div>
-              <div className="bg-white bg-opacity-20 rounded-full p-4">
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-            </div>
-          </div>
+      {/* Kullanıcı Bloğu */}
+      <div className="flex items-center gap-4 mb-6">
+        <img
+          src={user?.avatar}
+          className="w-16 h-16 rounded-full border-4 border-[#2AA5FE]/60 shadow-lg"
+        />
+        <div>
+          <p className="font-bold text-lg">{user?.username}</p>
+          <p className="text-gray-400 text-sm">{user?.email}</p>
         </div>
+      </div>
 
-        {/* Filters */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-white mb-4">Açık Teklifler</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg font-semibold transition ${
-                filter === 'all'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              Tümü
-            </button>
-            <button
-              onClick={() => setFilter('participation')}
-              className={`px-4 py-2 rounded-lg font-semibold transition ${
-                filter === 'participation'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              👥 Katılım
-            </button>
-            <button
-              onClick={() => setFilter('proposal')}
-              className={`px-4 py-2 rounded-lg font-semibold transition ${
-                filter === 'proposal'
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-              }`}
-            >
-              💰 Proje
-            </button>
-          </div>
+      {/* Wallet Info */}
+      <div className="bg-white/10 border border-white/20 rounded-xl p-4 mb-6">
+        <p className="text-sm text-gray-400">Sui Wallet</p>
+        <p className="font-mono text-[#8BD7FF] text-sm mt-1">
+          {user?.suiWalletAddress
+            ? `${user.suiWalletAddress.slice(0, 6)}...${user.suiWalletAddress.slice(-4)}`
+            : "Bağlı değil"}
+        </p>
+        <div className="mt-3">
+          <WalletConnect />
         </div>
+      </div>
 
-        {/* Tasks Grid */}
-        {loading ? (
-          <div className="text-center py-20">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500 mx-auto mb-4"></div>
-            <p className="text-white text-xl">Sui Network'ten veriler çekiliyor...</p>
-          </div>
-        ) : filteredTasks.length === 0 ? (
-          <div className="text-center py-20 bg-gray-800 bg-opacity-50 rounded-2xl">
-            <p className="text-gray-400 text-xl">Henüz teklif bulunmuyor</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredTasks.map((task: Task) => (
-              <div
-                key={task.id}
-                className="bg-gray-800 bg-opacity-50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700 hover:border-purple-500 transition cursor-pointer transform hover:scale-105 shadow-lg"
-                onClick={() => navigate(`/tasks/${task.id}`)}
-              >
-                <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
-                  <div className="flex gap-2">
-                    <span
-                      className={`${getTaskTypeColor(
-                        task.taskType
-                      )} text-white px-3 py-1 rounded-full text-xs font-bold shadow-md`}
-                    >
+      {/* Menü */}
+      <nav className="flex flex-col gap-3 text-sm">
+        <button
+          onClick={() => navigate('/profile')}
+          className="px-3 py-2 text-left rounded-lg hover:bg-white/10 transition"
+        >
+          Profilim
+        </button>
+        <button
+          onClick={() => navigate('/tasks/create')}
+          className="px-3 py-2 rounded-lg bg-[#2AA5FE]/20 border border-[#2AA5FE]/40 hover:bg-[#2AA5FE]/30 transition"
+        >
+          + Teklif Oluştur
+        </button>
+        <button
+          onClick={handleLogout}
+          className="px-3 py-2 text-left text-red-400 hover:bg-red-500/20 transition rounded-lg"
+        >
+          Çıkış Yap
+        </button>
+      </nav>
+
+    </aside>
+
+    {/* 🌟 SAĞ ANA BÖLÜM */}
+    <main className="flex-1 p-10 overflow-y-auto">
+
+      {/* Filtre */}
+      <div className="flex gap-4 mb-8">
+        <button
+          onClick={() => setFilter('all')}
+          className={`px-5 py-2 rounded-lg ${
+            filter === 'all'
+              ? 'bg-[#2AA5FE] text-black font-bold'
+              : 'bg-white/10 text-gray-300'
+          }`}
+        >
+          Tümü
+        </button>
+        <button
+          onClick={() => setFilter('participation')}
+          className={`px-5 py-2 rounded-lg ${
+            filter === 'participation'
+              ? 'bg-blue-500 text-black font-bold'
+              : 'bg-white/10 text-gray-300'
+          }`}
+        >
+          Katılım
+        </button>
+        <button
+          onClick={() => setFilter('proposal')}
+          className={`px-5 py-2 rounded-lg ${
+            filter === 'proposal'
+              ? 'bg-orange-500 text-black font-bold'
+              : 'bg-white/10 text-gray-300'
+          }`}
+        >
+          Proje
+        </button>
+      </div>
+
+      {/* Teklifler */}
+      {loading ? (
+        <div className="text-center mt-20">
+          <div className="animate-spin h-12 w-12 border-4 border-[#2AA5FE] border-t-transparent rounded-full mx-auto"></div>
+          <p className="text-[#8BD7FF] mt-4">Sui Network'ten veriler yükleniyor...</p>
+        </div>
+      ) : filteredTasks.length === 0 ? (
+        <div className="text-center py-20 bg-white/5 rounded-xl border border-white/10">
+          <p className="text-gray-400">Henüz teklif yok</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+
+          {/* 🌊 YATAY TEKLİF KARTI */}
+          {filteredTasks.map((task: Task) => (
+            <div
+              key={task.id}
+              onClick={() => navigate(`/tasks/${task.id}`)}
+              className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 cursor-pointer shadow-lg hover:border-[#2AA5FE] hover:shadow-[0_0_20px_rgba(42,165,254,0.4)] transition"
+            >
+              <div className="flex justify-between items-start mb-4">
+
+                <div>
+                  {/* Tür & Durum Badge */}
+                  <div className="flex gap-2 mb-2">
+                    <span className="px-3 py-1 bg-blue-500 text-xs rounded-full">
                       {getTaskTypeName(task.taskType)}
                     </span>
-                    <span
-                      className={`${getTaskStatusColor(
-                        task.status
-                      )} text-white px-3 py-1 rounded-full text-xs font-bold shadow-md`}
-                    >
+                    <span className="px-3 py-1 bg-green-600 text-xs rounded-full">
                       {getTaskStatusName(task.status)}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(task.createdAt).toLocaleDateString('tr-TR')}
-                  </span>
-                </div>
 
-                <h3 className="text-xl font-bold text-white mb-2 line-clamp-1">{task.title}</h3>
-                <p className="text-gray-400 text-sm mb-4 line-clamp-2">{task.description}</p>
+                  {/* Başlık */}
+                  <h3 className="text-2xl font-bold text-white mb-2">
+                    {task.title}
+                  </h3>
 
-                {task.taskType !== 1 && task.targetAmount > 0 && (
-                  <div className="mb-4">
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-gray-400">
-                        <span className="text-green-400 font-semibold">{(task.currentAmount / 1_000_000_000).toFixed(2)}</span>
-                        {' / '}
-                        {(task.targetAmount / 1_000_000_000).toFixed(2)} SUI
-                      </span>
-                      <span className="text-purple-400 font-bold">
-                        {task.targetAmount > 0 ? Math.round((task.currentAmount / task.targetAmount) * 100) : 0}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden shadow-inner">
-                      <div
-                        className="bg-gradient-to-r from-green-500 via-green-400 to-green-300 h-3 rounded-full transition-all duration-500 shadow-md"
-                        style={{
-                          width: `${task.targetAmount > 0 ? Math.min((task.currentAmount / task.targetAmount) * 100, 100) : 0}%`,
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
+                  {/* Açıklama */}
+                  <p className="text-gray-300 max-w-2xl mb-4">
+                    {task.description}
+                  </p>
 
-                {/* Bağış yapanlar listesi */}
-                {task.donations && task.donations.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-bold text-green-400 mb-2">Bağış Yapanlar</h4>
-                    <ul className="text-xs text-gray-300 space-y-1">
-                      {task.donations.map((donation: { donor: string; amount: number; username?: string }, idx: number) => (
-                        <li key={idx} className="flex justify-between">
-                          <span>{donation.username ? donation.username : `${donation.donor.slice(0, 6)}...${donation.donor.slice(-4)}`}</span>
-                          <span className="font-semibold text-green-300">{(donation.amount / 1_000_000_000).toFixed(2)} SUI</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Oylama durumu göstergesi - Sadece VOTING statüsündeyken */}
-                {task.status === 0 && (
-                  <div className="mb-4 p-3 bg-yellow-900 bg-opacity-30 border border-yellow-500 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-yellow-300">🗳️ Oylama Devam Ediyor</span>
-                      <span className="text-xs text-yellow-400">
-                        {task.yesVotes || 0} 👍 / {task.noVotes || 0} 👎
-                      </span>
-                    </div>
-                    {(task.yesVotes !== undefined && task.noVotes !== undefined) && (
-                      <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-green-500 h-full transition-all duration-300"
-                          style={{
-                            width: `${(task.yesVotes + task.noVotes) > 0
-                              ? (task.yesVotes / (task.yesVotes + task.noVotes)) * 100
-                              : 0}%`
-                          }}
-                        ></div>
+                  {/* Bağış Progress (varsa) */}
+                  {task.taskType !== 1 && task.targetAmount > 0 && (
+                    <div className="w-full max-w-lg">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-400">
+                          {(task.currentAmount / 1_000_000_000).toFixed(2)} / {(task.targetAmount / 1_000_000_000).toFixed(2)} SUI
+                        </span>
+                        <span className="text-[#8BD7FF] font-bold">
+                          {Math.round((task.currentAmount / task.targetAmount) * 100)}%
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="pt-4 border-t border-gray-700 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold">
-                      {task.creator.slice(2, 3).toUpperCase()}
+                      <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#2AA5FE] to-[#8BD7FF] transition-all"
+                          style={{
+                            width: `${Math.min((task.currentAmount / task.targetAmount) * 100, 100)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <span className="text-sm text-gray-400">
-                      {task.creator.slice(0, 6)}...{task.creator.slice(-4)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex gap-4 text-xs">
-                      <span className="flex items-center gap-1 text-gray-400">
-                        <span className="text-pink-400">💬</span>
-                        <span className="font-semibold">{task.commentsCount}</span>
-                      </span>
-                      <span className="flex items-center gap-1 text-gray-400">
-                        <span className="text-blue-400">👥</span>
-                        <span className="font-semibold">{task.participantsCount}</span>
-                      </span>
-                      {task.taskType !== 1 && (
-                        <span className="flex items-center gap-1 text-gray-400">
-                          <span className="text-green-400">💰</span>
-                          <span className="font-semibold">{task.donationsCount}</span>
-                        </span>
-                      )}
-                      {task.status === 0 && (task.yesVotes !== undefined || task.noVotes !== undefined) && (
-                        <span className="flex items-center gap-1 text-gray-400">
-                          <span className="text-yellow-400">🗳️</span>
-                          <span className="font-semibold">{(task.yesVotes || 0) + (task.noVotes || 0)}</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {Math.ceil((task.endDate - Date.now()) / (1000 * 60 * 60 * 24))} gün kaldı
-                    </div>
-                  </div>
+                  )}
                 </div>
+
+                {/* Sağ üstte tarih */}
+                <span className="text-xs text-gray-500">
+                  {new Date(task.createdAt).toLocaleDateString('tr-TR')}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
-  );
+
+              {/* Alt istatistikler */}
+              <div className="flex gap-6 text-sm text-gray-300 mt-4 border-t border-white/10 pt-4">
+                <span>💬 {task.commentsCount}</span>
+                <span>👥 {task.participantsCount}</span>
+                {task.donationsCount > 0 && <span>💰 {task.donationsCount}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+    </main>
+  </div>
+);
 }

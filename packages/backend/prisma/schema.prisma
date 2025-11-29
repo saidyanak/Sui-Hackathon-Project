@@ -1,48 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-// User model - sadece OAuth ve wallet bilgileri için kullanılıyor
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  username        String?   @unique
-  firstName       String?
-  lastName        String?
-  avatar          String?
-
-  intraId         Int?      @unique
-  googleId        String?   @unique
-
-  // Virtual Wallet: Sponsorlu işlemler için otomatik oluşturulan adres (her kullanıcıda olur)
-  suiWalletAddress String?
-
-  // Real Wallet: Kullanıcının Sui Wallet ile bağladığı gerçek cüzdan (opsiyonel)
+  id                String           @id @default(uuid())
+  email             String           @unique
+  username          String?          @unique
+  firstName         String?
+  lastName          String?
+  avatar            String?
+  intraId           Int?             @unique
+  googleId          String?          @unique
+  suiWalletAddress  String?
+  role              String           @default("USER")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   realWalletAddress String?
-
-  role            String    @default("USER")
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  nftAchievements NFTAchievement[]
+  nftAchievements   NFTAchievement[]
 }
 
-// NFT Achievement model - Sui blockchain'deki NFT'leri takip etmek için
 model NFTAchievement {
   id              String   @id @default(uuid())
   userId          String
   nftObjectId     String?  @unique
   achievementType String
-  taskId          String?  // Sui blockchain'deki task ID'si
+  taskId          String?
   metadataUrl     String?
   imageUrl        String?
   createdAt       DateTime @default(now())
-
   user            User     @relation(fields: [userId], references: [id])
 }
