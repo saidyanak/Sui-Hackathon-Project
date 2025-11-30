@@ -62,6 +62,33 @@ router.post('/wallet', authMiddleware, async (req, res) => {
   }
 });
 
+// Link external wallet (Slush, Sui Wallet extension vb.)
+router.post('/link-external-wallet', authMiddleware, async (req, res) => {
+  try {
+    const { externalWalletAddress } = req.body;
+    const userId = (req.user as any).id;
+
+    if (!externalWalletAddress) {
+      return res.status(400).json({ error: 'External wallet address is required' });
+    }
+
+    // externalWalletAddress alanını güncelle
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { externalWalletAddress },
+    });
+
+    res.json({ 
+      success: true, 
+      externalWalletAddress,
+      message: 'External wallet linked successfully'
+    });
+  } catch (error) {
+    console.error('Failed to link external wallet:', error);
+    res.status(500).json({ error: 'Failed to link external wallet' });
+  }
+});
+
 // Get user profiles by a list of wallet addresses
 router.post('/profiles-by-wallets', async (req, res) => {
   try {
