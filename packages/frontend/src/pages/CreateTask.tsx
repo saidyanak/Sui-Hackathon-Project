@@ -13,48 +13,34 @@ export default function CreateTask() {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    taskType: '0', // 0: PARTICIPATION, 1: PROPOSAL
+    taskType: '0',
     budgetAmount: '',
-    participantLimit: '', // Tek katılımcı limiti
+    participantLimit: '',
     votingEndDate: '',
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setLoading(false);
-      setError('Giriş bulunamadı. Lütfen Intra ile giriş yapın.');
-      toast.error('Giriş bulunamadı. Lütfen Intra ile giriş yapın.');
-      return;
-    }
-    if (!user?.realWalletAddress) {
-      setLoading(false);
-      setError('zkLogin cüzdanı bağlı değil. Lütfen giriş yapın veya zkLogin ile cüzdan bağlayın.');
-      toast.error('zkLogin cüzdanı bağlı değil.');
-      return;
-    }
-
     try {
-      // Backend'e sponsorlu task oluşturma isteği gönder
       const response = await api.post('/api/tasks/create-sponsored', {
         title: formData.title,
         description: formData.description,
         taskType: parseInt(formData.taskType),
-        budgetAmount: formData.taskType === '1' 
-          ? Math.floor(parseFloat(formData.budgetAmount || '0') * 1_000_000_000) // Convert SUI to MIST
-          : 0,
+        budgetAmount:
+          formData.taskType === '1'
+            ? Math.floor(parseFloat(formData.budgetAmount || '0') * 1_000_000_000)
+            : 0,
         participantLimit: parseInt(formData.participantLimit || '0'),
         votingEndDate: formData.votingEndDate,
       });
@@ -63,191 +49,180 @@ export default function CreateTask() {
         toast.success('Teklif başarıyla oluşturuldu!');
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
         navigate('/');
-        console.log('Task created successfully:', response.data);
       }
-    } catch (err: any) {
-      console.error("İşlem sırasında hata oluştu:", err);
-      const errorMessage = err.response?.data?.error || err.response?.data?.details || "İşlem sırasında bir hata oluştu.";
-      setError(errorMessage);
-      toast.error(errorMessage);
+    } catch (err) {
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.details ||
+        'İşlem sırasında bir hata oluştu.';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Minimum voting end date (tomorrow)
   const minDate = new Date();
   minDate.setDate(minDate.getDate() + 1);
   const minDateString = minDate.toISOString().slice(0, 16);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
-      <header className="border-b border-white/10 backdrop-blur-sm bg-black/20">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 text-transparent bg-clip-text">
-            Community Platform
+    <div className="min-h-screen bg-gradient-to-br from-[#0A1A2F] via-[#0C2238] to-[#071018] text-white">
+
+      {/* === HEADER (Home Style) === */}
+      <header className="h-20 bg-white/5 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-10">
+        <h1 className="text-xl font-bold text-[#8BD7FF]">Create New Proposal</h1>
+
+        <div className="flex items-center gap-4">
+          <span className="text-gray-300 text-sm">{user?.username}</span>
+
+          <Link
+            to="/"
+            className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 hover:bg-white/20 transition"
+          >
+            Go Back
           </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-white/70 text-sm">
-              {user?.username || user?.email}
-            </span>
-            <Link 
-              to="/" 
-              className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-            >
-              Geri Dön
-            </Link>
-          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-4 py-12">
-        <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Yeni Teklif Oluştur</h1>
-          <p className="text-white/60 mb-8">
-            Topluluğa yeni bir etkinlik veya proje öner. Teklif oylamaya açılacak.
+      {/* === MAIN CARD === */}
+      <main className="max-w-2xl mx-auto px-4 pt-12 pb-24">
+        <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-xl p-8 shadow-lg">
+
+          <h2 className="text-2xl font-bold text-[#8BD7FF] mb-2">
+            Proposal Details
+          </h2>
+
+          <p className="text-gray-300 mb-8">
+            Propose a new event or project to the community.
           </p>
 
           {error && (
-            <div className="mb-6 p-4 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200">
+            <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+
             {/* Task Type */}
             <div>
-              <label className="block text-white/80 text-sm font-medium mb-2">
-                Teklif Tipi
+              <label className="block text-gray-300 text-sm font-medium mb-2">
+                Proposal Type
               </label>
               <select
                 name="taskType"
                 value={formData.taskType}
                 onChange={handleChange}
-                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-[#2AA5FE]"
               >
-                <option value="0" className="bg-slate-800">🎮 Katılım (Halısaha, Hackathon vb.)</option>
-                <option value="1" className="bg-slate-800">💰 Proje (Bütçe Gerektiren)</option>
+                <option value="0" className="bg-[#0C2238]">
+                  🎮 Participation (Sports, Hackathon, etc.)
+                </option>
+                <option value="1" className="bg-[#0C2238]">
+                  💰 Project (Requires Budget)
+                </option>
               </select>
             </div>
 
             {/* Title */}
             <div>
-              <label className="block text-white/80 text-sm font-medium mb-2">
-                Başlık
-              </label>
+              <label className="block text-gray-300 text-sm mb-2">Title</label>
               <input
                 type="text"
                 name="title"
+                placeholder="E.g.: Weekly Soccer Match"
                 value={formData.title}
                 onChange={handleChange}
-                placeholder="Örn: Haftalık Halısaha Maçı"
                 required
-                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#2AA5FE]"
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-white/80 text-sm font-medium mb-2">
-                Açıklama
-              </label>
+              <label className="block text-gray-300 text-sm mb-2">Description</label>
               <textarea
                 name="description"
+                rows={4}
+                placeholder="Provide detailed information about the proposal..."
                 value={formData.description}
                 onChange={handleChange}
-                placeholder="Teklif hakkında detaylı bilgi verin..."
                 required
-                rows={4}
-                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#2AA5FE] resize-none"
               />
             </div>
 
-            {/* Budget (only for PROPOSAL type) */}
+            {/* Budget */}
             {formData.taskType === '1' && (
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
-                  Bütçe (SUI)
+                <label className="block text-gray-300 text-sm mb-2">
+                  Budget (SUI)
                 </label>
                 <input
                   type="number"
                   name="budgetAmount"
-                  value={formData.budgetAmount}
-                  onChange={handleChange}
                   placeholder="0.00"
                   min="0"
                   step="0.01"
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  value={formData.budgetAmount}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#2AA5FE]"
                 />
-                <p className="mt-1 text-white/40 text-sm">
-                  Onaylanırsa sponsor tarafından aktarılacak miktar
+                <p className="text-gray-400 text-xs mt-1">
+                  Will be transferred by the sponsor if approved.
                 </p>
               </div>
             )}
 
-            {/* Participant Limit - Sadece katılım tipi için */}
+            {/* Participant Limit */}
             {formData.taskType === '0' && (
               <div>
-                <label className="block text-white/80 text-sm font-medium mb-2">
-                  👥 Katılımcı Sayısı Limiti
+                <label className="block text-gray-300 text-sm mb-2">
+                  👥 Participant Limit
                 </label>
                 <input
                   type="number"
                   name="participantLimit"
+                  placeholder="0 (Unlimited)"
+                  min="0"
                   value={formData.participantLimit}
                   onChange={handleChange}
-                  placeholder="0 (Sınırsız)"
-                  min="0"
-                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white placeholder-gray-400 focus:ring-2 focus:ring-[#2AA5FE]"
                 />
-                <p className="mt-1 text-white/40 text-sm">
-                  0 girerseniz sınırsız katılım olur
+                <p className="text-gray-400 text-xs mt-1">
+                  0 → unlimited participation
                 </p>
               </div>
             )}
 
             {/* Voting End Date */}
             <div>
-              <label className="block text-white/80 text-sm font-medium mb-2">
-                Oylama Bitiş Tarihi
+              <label className="block text-gray-300 text-sm mb-2">
+                Voting End Date
               </label>
               <input
                 type="datetime-local"
                 name="votingEndDate"
+                required
+                min={minDateString}
                 value={formData.votingEndDate}
                 onChange={handleChange}
-                min={minDateString}
-                required
-                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/20 text-white focus:ring-2 focus:ring-[#2AA5FE]"
               />
             </div>
 
-            {/* Submit Button */}
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white font-semibold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-lg bg-[#2AA5FE] text-black font-bold hover:bg-[#53bfff] transition disabled:opacity-50"
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span>Oluşturuluyor...</span>
-                </>
-              ) : (
-                <>
-                  <span>🚀</span>
-                  <span>Teklifi Oluştur</span>
-                </>
-              )}
+              {loading ? "Creating..." : "🚀 Create Proposal"}
             </button>
 
-            <p className="text-center text-white/40 text-sm">
-              ⛽ Gas ücreti sponsor tarafından karşılanmaktadır.
+            <p className="text-center text-gray-400 text-sm">
+              ⛽ Gas fee is covered by the sponsor.
             </p>
           </form>
         </div>
