@@ -389,6 +389,14 @@ export default function Home() {
           💝 Topluluğa Bağış Yap
         </button>
 
+        {/* 🏆 LİDERLİK TABLOSU BUTONU */}
+        <button
+          onClick={() => navigate('/leaderboard')}
+          className="mt-3 w-full py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold rounded-xl hover:from-yellow-600 hover:to-orange-600 transition shadow-lg flex items-center justify-center gap-2"
+        >
+          🏆 Liderlik Tablosu
+        </button>
+
         {/* ÇIKIŞ BUTONU */}
         <div className="mt-auto">
           <button
