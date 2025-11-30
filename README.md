@@ -381,9 +381,10 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 👥 Team
 
-Built with ❤️ for **Sui Hackathon 2024**
+Built with ❤️ for **Sui Hackathon 2025**
 
 - GitHub: [@saidyanak](https://github.com/saidyanak)
+- - GitHub: [@irfancemekmen](https://github.com/irfancemekmen)
 
 ---
 
