@@ -384,7 +384,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 Built with ❤️ for **Sui Hackathon 2025**
 
 - GitHub: [@saidyanak](https://github.com/saidyanak)
-- - GitHub: [@irfancemekmen](https://github.com/irfancemekmen)
+- GitHub: [@irfancemekmen](https://github.com/irfancemekmen)
 
 ---
 
