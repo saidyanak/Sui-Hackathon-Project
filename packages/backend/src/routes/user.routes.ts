@@ -93,4 +93,50 @@ router.post('/profiles-by-wallets', async (req, res) => {
   }
 });
 
+// Leaderboard - En çok katkıda bulunanlar
+router.get('/leaderboard', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        realWalletAddress: { not: null },
+      },
+      select: {
+        realWalletAddress: true,
+        username: true,
+        avatar: true,
+        tasksCreated: true,
+        tasksParticipated: true,
+        votesCount: true,
+        donationsCount: true,
+        totalDonated: true,
+        reputationScore: true,
+      },
+      orderBy: [
+        { reputationScore: 'desc' },
+        { totalDonated: 'desc' },
+      ],
+      take: 50, // Top 50
+    });
+
+    // BigInt'leri string'e çevir
+    const leaderboard = users.map((user, index) => ({
+      rank: index + 1,
+      address: user.realWalletAddress,
+      username: user.username,
+      avatar: user.avatar,
+      tasksCreated: user.tasksCreated || 0,
+      tasksParticipated: user.tasksParticipated || 0,
+      votesCount: user.votesCount || 0,
+      donationsCount: user.donationsCount || 0,
+      totalDonated: user.totalDonated?.toString() || '0',
+      reputationScore: user.reputationScore || 0,
+    }));
+
+    res.json({ success: true, leaderboard });
+  } catch (error) {
+    console.error('Failed to fetch leaderboard:', error);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
 export default router;
