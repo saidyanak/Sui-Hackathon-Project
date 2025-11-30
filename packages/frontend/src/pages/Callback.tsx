@@ -26,25 +26,25 @@ export default function Callback() {
     // Save token and fetch user data
     const fetchUser = async () => {
       try {
-        // Set token for API calls
+        // Store token for API requests
         localStorage.setItem('token', token);
 
         const response = await authService.getCurrentUser();
         const user = response.user;
 
-        // ProfileId varsa kaydet
+        // Save profile ID if available
         if (user.profileId) {
           localStorage.setItem('userProfileId', user.profileId);
         }
 
         setAuth(user, token);
 
-        // zkLogin cüzdanı bağlı mı kontrol et
+        // Check if zkLogin wallet is connected
         if (!user.realWalletAddress) {
-          // Cüzdan yok → zkLogin sayfasına yönlendir
+          // Redirect to zkLogin setup
           navigate('/zklogin');
         } else {
-          // Cüzdan var → ana sayfaya
+          // Wallet exists → redirect to homepage
           navigate('/');
         }
       } catch (error) {
@@ -61,7 +61,7 @@ export default function Callback() {
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
       <div className="text-center">
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-purple-500 mx-auto mb-4"></div>
-        <p className="text-white text-xl">Giriş yapılıyor...</p>
+        <p className="text-white text-xl">Signing you in...</p>
       </div>
     </div>
   );

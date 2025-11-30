@@ -1,7 +1,5 @@
--- RedefineTables
-PRAGMA defer_foreign_keys=ON;
-PRAGMA foreign_keys=OFF;
-CREATE TABLE "new_User" (
+-- CreateTable
+CREATE TABLE "User" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "email" TEXT NOT NULL,
     "username" TEXT,
@@ -23,12 +21,31 @@ CREATE TABLE "new_User" (
     "totalDonated" BIGINT NOT NULL DEFAULT 0,
     "reputationScore" INTEGER NOT NULL DEFAULT 0
 );
-INSERT INTO "new_User" ("avatar", "createdAt", "email", "firstName", "googleId", "id", "intraId", "lastName", "profileId", "realWalletAddress", "role", "suiWalletAddress", "updatedAt", "username") SELECT "avatar", "createdAt", "email", "firstName", "googleId", "id", "intraId", "lastName", "profileId", "realWalletAddress", "role", "suiWalletAddress", "updatedAt", "username" FROM "User";
-DROP TABLE "User";
-ALTER TABLE "new_User" RENAME TO "User";
+
+-- CreateTable
+CREATE TABLE "NFTAchievement" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userId" TEXT NOT NULL,
+    "nftObjectId" TEXT,
+    "achievementType" TEXT NOT NULL,
+    "taskId" TEXT,
+    "metadataUrl" TEXT,
+    "imageUrl" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "NFTAchievement_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_username_key" ON "User"("username");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_intraId_key" ON "User"("intraId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_googleId_key" ON "User"("googleId");
-PRAGMA foreign_keys=ON;
-PRAGMA defer_foreign_keys=OFF;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "NFTAchievement_nftObjectId_key" ON "NFTAchievement"("nftObjectId");

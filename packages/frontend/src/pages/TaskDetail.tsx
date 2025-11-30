@@ -1,21 +1,21 @@
-// === ENTIRE FILE TRANSLATED TO ENGLISH ===
-
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSuiClient, useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { SuiObjectData } from '@mysten/sui/client';
-import { TransactionBlock } from '@mysten/sui.js/transactions';
+import { Transaction } from '@mysten/sui/transactions';
+import { toast } from 'react-hot-toast';
 import { userService } from '../services/userService';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
 import { TaskCompletionClaim } from '../components/TaskCompletionClaim';
 
 const PACKAGE_ID = import.meta.env.VITE_SUI_PACKAGE_ID;
+const SPONSOR_ADDRESS = '0xc41d4455273841e9cb81ae9f6034c0966a61bb540892a5fd8caa9614e2c44115';
 
 // --- Interfaces ---
 interface UserProfile {
-  suiWalletAddress: string;
+  realWalletAddress: string;
   username: string;
   avatar: string;
 }
@@ -58,16 +58,20 @@ const parseTask = (object: SuiObjectData): Omit<Task, 'creator' | 'comments'> & 
     throw new Error('Invalid object content');
   }
   const fields = object.content.fields as any;
-
+  console.log('Raw fields.votes:', fields.votes); // <--- ADDED LOG
+  
+  // Votes'ları doğru şekilde parse et - vote_type number olarak kesinleştir
   const parsedVotes = (fields.votes || []).map((v: any) => {
     const voteFields = v.fields || v;
     return {
       voter: voteFields.voter,
-      vote_type: Number(voteFields.vote_type),
+      vote_type: Number(voteFields.vote_type), // String veya number olabilir, kesin number yap
       timestamp: voteFields.timestamp,
     };
   });
-
+  
+  console.log('Parsed votes:', parsedVotes);
+  
   return {
     id: fields.id.id,
     title: fields.title,
@@ -96,7 +100,7 @@ export default function TaskDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newComment, setNewComment] = useState('');
 
-  const { user } = useAuthStore((state) => ({ user: state.user }));
+  const { user } = useAuthStore((state) => ({ user: state.user })); // Extract user once
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['task', taskId],
@@ -114,16 +118,17 @@ export default function TaskDetail() {
       const uniqueAddresses = [...new Set(authorAddresses)];
       
       const profiles = await userService.getProfilesByWalletAddresses(uniqueAddresses);
-      const profilesMap = new Map(profiles.map(p => [p.suiWalletAddress, p]));
+      const profilesMap = new Map(profiles.map(p => [p.realWalletAddress, p]));
       const getProfile = (addr: string) => profilesMap.get(addr);
       const creatorProfile = getProfile(parsedData.creatorAddress);
 
       let donations: { donor: string; amount: number; username?: string }[] = [];
       let donorAddresses: string[] = [];
-      if (object.data?.content &&
+      if (
+        object.data?.content &&
         'fields' in object.data.content &&
-        Array.isArray((object.data.content as any).fields.donations)) {
-
+        Array.isArray((object.data.content as any).fields.donations)
+      ) {
         donations = (object.data.content as any).fields.donations.map((d: any) => ({
           donor: d.fields.donor,
           amount: Number(d.fields.amount),
@@ -131,15 +136,15 @@ export default function TaskDetail() {
         donorAddresses = donations.map(d => d.donor);
       }
 
+      // Donor profillerini çek
       let donorProfiles: { [address: string]: { username?: string } } = {};
       if (donorAddresses.length > 0) {
         const profiles = await userService.getProfilesByWalletAddresses(donorAddresses);
         profiles.forEach(profile => {
-          donorProfiles[profile.suiWalletAddress] = { username: profile.username };
+          donorProfiles[profile.realWalletAddress] = { username: profile.username };
         });
         donations = donations.map(d => ({ ...d, username: donorProfiles[d.donor]?.username }));
       }
-
       return {
         id: parsedData.id,
         title: parsedData.title,
@@ -165,46 +170,56 @@ export default function TaskDetail() {
       };
     },
     enabled: !!taskId && !!client,
+    staleTime: 30000, // 30 saniye boyunca cache'den oku
+    refetchOnWindowFocus: false, // Pencere odaklanınca yeniden çekme
   });
 
   const { data: hasVotedStatus, isLoading: isLoadingHasVoted } = useQuery({
-    queryKey: ['hasVoted', taskId, user?.suiWalletAddress],
+    queryKey: ['hasVoted', taskId, user?.realWalletAddress],
     queryFn: async () => {
-      if (!taskId || !user?.suiWalletAddress) return false;
+      if (!taskId || !user?.realWalletAddress) return false;
 
-      const tx = new TransactionBlock();
+      const tx = new Transaction();
+      const target = `${PACKAGE_ID}::task::has_voted`;
+      const args = [tx.object(taskId), tx.pure.address(user.realWalletAddress)];
+      
       tx.moveCall({
-        target: `${PACKAGE_ID}::task::has_voted`,
-        arguments: [
-          tx.object(taskId),
-          tx.pure.address(user.suiWalletAddress)
-        ],
+        target: target,
+        arguments: args,
       });
 
       const result = await client.devInspectTransactionBlock({
-        sender: user.suiWalletAddress,
+        sender: user.realWalletAddress,
         transactionBlock: tx,
       });
 
-      if (result.results?.[0]?.returnValues) {
-        const [value] = result.results[0].returnValues[0];
-        return value[0] === 1;
+      if (result.results && result.results[0] && result.results[0].returnValues) {
+        const [value, type] = result.results[0].returnValues[0];
+        const hasVotedResult = value[0] === 1;
+        return hasVotedResult;
       }
       return false;
     },
-    enabled: !!taskId && !!user?.suiWalletAddress && !!client,
+    enabled: !!taskId && !!user?.realWalletAddress && !!client,
+    staleTime: 60000, // 1 dakika cache
+    refetchOnWindowFocus: false,
   });
 
-  const runMutation = (transaction: TransactionBlock, successMessage: string) => {
+  const runMutation = (transaction: Transaction, successMessage: string) => {
     setIsSubmitting(true);
     signAndExecute({ transaction }, {
       onSuccess: () => {
+        console.log(successMessage);
         queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-        queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.suiWalletAddress] });
+        queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.realWalletAddress] }); // Invalidate hasVoted query
         setIsSubmitting(false);
         setDonationAmount('');
       },
-      onError: () => setIsSubmitting(false)
+      onError: (err) => {
+        console.error('Transaction failed', err);
+        // You might want to show an error message to the user here
+        setIsSubmitting(false);
+      }
     });
   };
 
@@ -212,63 +227,134 @@ export default function TaskDetail() {
     if (!taskId) return;
 
     if (!user) {
-      alert('You must be logged in to join.');
+      alert('Katılmak için giriş yapmalısınız.');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // Backend'e sponsorlu katılma isteği gönder
       const response = await api.post(`/api/tasks/${taskId}/join-sponsored`);
+
       if (response.data.success) {
+        console.log('Göreve başarıyla katıldınız!');
         queryClient.invalidateQueries({ queryKey: ['task', taskId] });
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
       }
     } catch (error: any) {
-      alert('Error while joining: ' + (error.response?.data?.error || error.message));
+      console.error('Katılırken hata:', error);
+      alert('Katılırken hata: ' + (error.response?.data?.error || error.message));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDonate = () => {
+  const handleDonate = async () => {
     const amount = parseFloat(donationAmount);
-    if (!taskId || isNaN(amount) || amount <= 0) return;
+    if (!taskId || isNaN(amount) || amount <= 0) {
+      alert('Geçerli bir bağış miktarı girin');
+      return;
+    }
+
+    if (!user) {
+      alert('Bağış yapmak için giriş yapmalısınız.');
+      return;
+    }
+
+    if (!user.realWalletAddress) {
+      alert('Cüzdan bulunamadı! Lütfen zkLogin ile cüzdan bağlayın.');
+      return;
+    }
 
     const amountInMist = Math.floor(amount * 1_000_000_000);
-    const tx = new TransactionBlock();
-    const coin = tx.splitCoins(tx.gas, [amountInMist]);
+    
+    setIsSubmitting(true);
+    try {
+      // Harici cüzdan bağlıysa gerçek SUI transferi yap
+      if (currentAccount?.address) {
+        // Gerçek bağış - kullanıcının cüzdanından sponsor'a
+        const tx = new Transaction();
+        const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amountInMist)]);
+        
+        tx.moveCall({
+          target: `${PACKAGE_ID}::task::donate_to_sponsor`,
+          arguments: [
+            tx.object(taskId),
+            coin,
+            tx.pure.address(SPONSOR_ADDRESS),
+            tx.pure.string(`${user.username || 'Anonim'} tarafından bağış`),
+          ],
+        });
 
-    tx.moveCall({
-      target: `${PACKAGE_ID}::task::donate`,
-      arguments: [tx.object(taskId), coin, tx.pure.string('Donation from frontend')],
-    });
+        signAndExecute(
+          { transaction: tx },
+          {
+            onSuccess: () => {
+              toast.success(`🎉 ${amount} SUI gerçek bağış yapıldı!`);
+              setDonationAmount('');
+              queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+              queryClient.invalidateQueries({ queryKey: ['tasks'] });
+              setIsSubmitting(false);
+            },
+            onError: (error: any) => {
+              console.error('Gerçek bağış hatası:', error);
+              toast.error('Bağış başarısız: ' + error.message);
+              setIsSubmitting(false);
+            },
+          }
+        );
+      } else {
+        // Harici cüzdan yok - Backend sponsored demo bağış
+        const response = await api.post(`/api/tasks/${taskId}/donate-sponsored`, {
+          amount: amountInMist,
+        });
 
-    runMutation(tx, 'Successfully donated!');
+        if (response.data.success) {
+          toast.success(`🎉 ${amount} SUI (demo) bağışlandı!`);
+          setDonationAmount('');
+          queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+          queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        }
+        setIsSubmitting(false);
+      }
+    } catch (error: any) {
+      console.error('Bağış hatası:', error);
+      alert('Bağış yapılırken hata: ' + (error.response?.data?.error || error.message));
+      setIsSubmitting(false);
+    }
   };
   
   const handleVote = async (voteType: number) => {
     if (!taskId) return;
 
     if (!user) {
-      alert('You must be logged in to vote.');
+      alert('Oy vermek için giriş yapmalısınız.');
       return;
     }
 
-    const profileId = localStorage.getItem('userProfileId');
-    if (!profileId) {
-      alert('Profile not found! Please log out and log back in.');
+    if (!user.realWalletAddress) {
+      alert('Cüzdan bulunamadı! Lütfen zkLogin ile cüzdan bağlayın.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await api.post(`/api/tasks/${taskId}/vote-sponsored`, { voteType, profileId });
+      // Backend'e sponsorlu oy isteği gönder
+      const response = await api.post(`/api/tasks/${taskId}/vote-sponsored`, {
+        voteType,
+      });
+
+      if (response.data.success) {
+        console.log('Oy başarıyla kaydedildi!');
+      }
     } catch (error: any) {
-      alert('Error while voting: ' + (error.response?.data?.error || error.message));
+      console.error('Oy kullanılırken hata:', error);
+      alert('Oy kullanılırken hata: ' + (error.response?.data?.error || error.message));
     } finally {
+      // İşlem başarılı da olsa başarısız da olsa, en güncel veriyi çekmek için invalidate et.
       queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.suiWalletAddress] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ana sayfadaki listeyi de yenile
+      queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.realWalletAddress] });
       setIsSubmitting(false);
     }
   };
@@ -278,22 +364,25 @@ export default function TaskDetail() {
     if (!newComment.trim() || !taskId) return;
 
     if (!user) {
-      alert('You must be logged in to comment.');
+      alert('Yorum yapmak için giriş yapmalısınız.');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // Backend'e sponsorlu yorum isteği gönder
       const response = await api.post(`/api/tasks/${taskId}/comment-sponsored`, {
         content: newComment,
       });
 
       if (response.data.success) {
+        console.log('Yorum başarıyla eklendi!');
         queryClient.invalidateQueries({ queryKey: ['task', taskId] });
         setNewComment('');
       }
     } catch (error: any) {
-      alert('Error adding comment: ' + (error.response?.data?.error || error.message));
+      console.error('Yorum eklenirken hata:', error);
+      alert('Yorum eklenirken hata: ' + (error.response?.data?.error || error.message));
     } finally {
       setIsSubmitting(false);
     }
@@ -302,11 +391,11 @@ export default function TaskDetail() {
   // Helper functions
   const getTaskStatusColor = (status: number) => {
     switch (status) {
-      case 0: return 'bg-yellow-500';
-      case 1: return 'bg-green-500';
-      case 2: return 'bg-red-500';
-      case 3: return 'bg-gray-500';
-      case 4: return 'bg-gray-600';
+      case 0: return 'bg-yellow-500';  // VOTING
+      case 1: return 'bg-green-500';   // ACTIVE
+      case 2: return 'bg-red-500';     // REJECTED
+      case 3: return 'bg-gray-500';    // COMPLETED
+      case 4: return 'bg-gray-600';    // CANCELLED
       default: return 'bg-gray-500';
     }
   };
@@ -315,9 +404,9 @@ export default function TaskDetail() {
     switch (status) {
       case 0: return 'Voting';
       case 1: return 'Active';
-      case 2: return 'Rejected';
-      case 3: return 'Completed';
-      case 4: return 'Cancelled';
+      case 2: return 'Recejted';
+      case 3: return 'Complete';
+      case 4: return 'Cancel';
       default: return 'Unknown';
     }
   };
@@ -330,16 +419,19 @@ export default function TaskDetail() {
     }
   };
 
+  // Vote counts
   const yesVotes = task?.votes.filter(v => v.vote_type === 1).length || 0;
   const noVotes = task?.votes.filter(v => v.vote_type === 0).length || 0;
   const totalVotes = yesVotes + noVotes;
   const yesPercentage = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
 
-  const userVote = task?.votes.find(v => v.voter === user?.suiWalletAddress);
-  const hasVoted = hasVotedStatus;
-  const isParticipant = user?.suiWalletAddress && task?.participants.includes(user.suiWalletAddress);
+  // Check if user has voted
+  const userVote = task?.votes.find(v => v.voter === user?.realWalletAddress);
+  const hasVoted = hasVotedStatus; // Use the result from the new query
 
-  const canJoin = task?.task_type === 0 && task?.status === 1;
+  // Check if user is participant - use user's wallet address from auth store
+  const isParticipant = user?.realWalletAddress && task?.participants.includes(user.realWalletAddress);
+  const canJoin = task?.task_type === 0 && task?.status === 1; // Only PARTICIPATION type and ACTIVE status
   const canDonate = task?.task_type === 1 || task?.task_type === 2;
   const isVoting = task?.status === 0;
 
@@ -355,35 +447,41 @@ export default function TaskDetail() {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-red-500 mb-4">Task Failed to Load</h2>
+          <h2 className="text-2xl font-bold text-red-500 mb-4">Görev Yüklenemedi</h2>
           <p className="text-gray-400">{(error as Error).message}</p>
         </div>
       </div>
     );
   }
 
-return (
+  return (
   <div className="min-h-screen bg-gradient-to-br from-[#0A1A2F] via-[#0C2238] to-[#071018] text-white">
-
-    {/* Header */}
+    
+    {/* HEADER */}
     <header className="h-20 bg-white/5 backdrop-blur-xl border-b border-white/10 flex items-center px-10 sticky top-0 z-30">
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => navigate('/')}
         className="text-gray-300 hover:text-white transition"
       >
         ← Go Back
       </button>
     </header>
 
-    <main className="max-w-4xl mx-auto px-6 pt-6 pb-24">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-[#8BD7FF] mb-3">{task?.title}</h1>
+    <main className="max-w-4xl mx-auto px-6 pt-10 pb-24">
+
+      {/* TASK HEADER */}
+      <div className="mb-10">
+        <h1 className="text-4xl font-bold text-[#8BD7FF] mb-3">{task?.title}</h1>
 
         <div className="flex items-center gap-3 mb-4">
-          {task?.creator.avatar && <img src={task.creator.avatar} className="w-8 h-8 rounded-full" />}
-          <span className="text-gray-400">
+          {task?.creator.avatar && (
+            <img src={task.creator.avatar} alt={task.creator.username} className="w-9 h-9 rounded-full" />
+          )}
+
+          <span className="text-gray-300">
             Created by {task?.creator.username || 'Unknown User'}
           </span>
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -395,24 +493,36 @@ return (
           </button>
         </div>
 
-        <div className="flex gap-2">
-          <span className={`px-3 py-1 rounded-lg text-sm font-bold ${task?.task_type === 0 ? 'bg-blue-500/80' : 'bg-orange-500/80'}`}>
+        <div className="flex gap-3">
+          <span
+            className={`px-3 py-1 rounded-lg text-sm font-bold text-white 
+              backdrop-blur-xl border border-white/10 
+              ${task?.task_type === 0 ? 'bg-blue-500/30' : 'bg-orange-500/40'}
+            `}
+          >
             {getTaskTypeName(task?.task_type || 0)}
           </span>
-          <span className={`${getTaskStatusColor(task?.status || 0)} text-white px-3 py-1 rounded-lg`}>
+
+          <span
+            className={`
+              ${getTaskStatusColor(task?.status || 0)}
+              px-3 py-1 rounded-lg text-sm font-bold text-white 
+              bg-opacity-40 backdrop-blur-xl border border-white/10
+            `}
+          >
             {getTaskStatusName(task?.status || 0)}
           </span>
         </div>
       </div>
 
-      {/* CLAIM COMPONENT */}
-      {user && task && (
+      {/* TASK COMPLETION CLAIM */}
+      {user && task && localStorage.getItem('userProfileId') && (
         <TaskCompletionClaim
           taskId={task.id}
           profileId={localStorage.getItem('userProfileId') || ''}
           taskTitle={task.title}
           isParticipant={!!isParticipant}
-          isCreator={task.creator.address === user.suiWalletAddress}
+          isCreator={task.creator.address === user.realWalletAddress}
           taskType={task.task_type}
           taskStatus={task.status}
           onClaimed={() => {
@@ -422,44 +532,49 @@ return (
         />
       )}
 
-      {/* Voting Section */}
+      {/* VOTING SECTION */}
       {isVoting && (
-        <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-8 shadow-lg mb-10">
-          <h2 className="text-2xl font-bold text-[#8BD7FF] mb-6 flex items-center gap-2">
-            🗳️ Community Voting
-            <span className="text-white/50 text-sm">({totalVotes} total votes)</span>
-          </h2>
+        <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-8 shadow-xl mb-10">
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-6 mb-8">
-
-            <div className="bg-green-500/20 border border-green-500/40 p-5 rounded-xl">
-              <p className="text-green-300 font-semibold text-sm mb-1">👍 YES</p>
-              <p className="text-3xl font-bold">{yesVotes}</p>
-              <p className="text-xs text-gray-300 mt-1">{yesVotes} approved</p>
-            </div>
-
-            <div className="bg-red-500/20 border border-red-500/40 p-5 rounded-xl">
-              <p className="text-red-300 font-semibold text-sm mb-1">👎 NO</p>
-              <p className="text-3xl font-bold">{noVotes}</p>
-              <p className="text-xs text-gray-300 mt-1">{noVotes} rejected</p>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-[#8BD7FF] flex items-center gap-2">
+              🗳️ Community Voting
+            </h2>
+            <div className="bg-white/10 px-4 py-2 rounded-full border border-white/10">
+              <span className="text-white/80 font-bold text-lg">
+                📊 {totalVotes} Total Votes
+              </span>
             </div>
           </div>
 
-          {/* Progress */}
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-6 mb-8">
+            <div className="bg-green-500/20 border border-green-500/40 p-5 rounded-xl backdrop-blur-md">
+              <p className="text-green-300 font-semibold text-sm mb-1">👍 YES</p>
+              <p className="text-3xl font-bold">{yesVotes}</p>
+              <p className="text-xs text-gray-300 mt-1">{yesVotes} people approved</p>
+            </div>
+
+            <div className="bg-red-500/20 border border-red-500/40 p-5 rounded-xl backdrop-blur-md">
+              <p className="text-red-300 font-semibold text-sm mb-1">👎 NO</p>
+              <p className="text-3xl font-bold">{noVotes}</p>
+              <p className="text-xs text-gray-300 mt-1">{noVotes} people rejected</p>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
           <div className="mb-4">
-            <div className="flex justify-between text-xs text-yellow-200 mb-2">
+            <div className="flex justify-between text-xs text-blue-200 mb-2">
               <span className="font-semibold">Approval Rate</span>
               <span className="font-semibold">
-                {yesPercentage >= 50
-                  ? '✅ Approval Threshold Passed'
-                  : `❌ ${50 - yesPercentage}% more required`}
+                {yesPercentage >= 50 ? '✅ Threshold Reached' : `❌ ${50 - yesPercentage}% more required`}
               </span>
             </div>
 
-            <div className="relative w-full bg-gray-700 rounded-full h-6 overflow-hidden">
+            <div className="relative w-full bg-black/30 rounded-full h-5 overflow-hidden border border-white/5">
               <div
-                className="bg-gradient-to-r from-green-500 to-green-400 h-full transition-all duration-500 flex items-center justify-center"
+                className="bg-gradient-to-r from-green-400 to-green-300 h-full transition-all duration-500 flex items-center justify-center"
                 style={{ width: `${yesPercentage}%` }}
               >
                 {yesPercentage > 10 && (
@@ -467,81 +582,101 @@ return (
                 )}
               </div>
 
-              <div className="absolute top-0 left-1/2 w-0.5 bg-yellow-300 opacity-50 h-full"></div>
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-yellow-300 text-xs font-semibold">
-                ↓ 50%
-              </div>
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 h-full w-0.5 bg-yellow-300/60"></div>
             </div>
           </div>
 
-          {/* Voting Deadline */}
-          <div className="mb-6 p-3 bg-yellow-800 bg-opacity-30 rounded-lg border border-yellow-600">
-            <p className="text-yellow-200 text-sm text-center">
-              ⏰ <strong>Voting Ends:</strong>{' '}
+          {/* Deadline */}
+          <div className="mb-6 p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-md">
+            <p className="text-blue-200 text-sm text-center">
+              ⏰ <strong>Voting Ends:</strong>{" "}
               {task?.voting_end_date
-                ? new Date(parseInt(task.voting_end_date.toString())).toLocaleString()
-                : 'Unknown'}
+                ? new Date(parseInt(task.voting_end_date.toString())).toLocaleString("en-US")
+                : "Unknown"}
             </p>
           </div>
 
-          {/* Buttons */}
+          {/* Voting Buttons */}
           {!hasVoted ? (
             <div className="flex gap-4">
-
               <button
                 onClick={() => handleVote(1)}
-                className="flex-1 py-3 bg-[#2AA5FE] hover:bg-[#53bfff] text-black font-bold rounded-xl"
+                disabled={isSubmitting || !user}
+                className="flex-1 py-3 
+                bg-[#2AA5FE] hover:bg-[#53bfff] 
+                text-black font-bold rounded-xl 
+                transition shadow-lg disabled:opacity-40"
               >
                 👍 Yes
               </button>
 
               <button
                 onClick={() => handleVote(0)}
-                className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl"
+                disabled={isSubmitting || !user}
+                className="flex-1 py-3 
+                bg-red-600 hover:bg-red-700 
+                text-white font-bold rounded-xl 
+                transition shadow-lg disabled:opacity-40"
               >
                 👎 No
               </button>
-
             </div>
           ) : (
-            <p className="text-center text-green-400 font-semibold">
+            <p className="text-center text-green-400 font-semibold mt-4">
               👍 You voted — {userVote?.vote_type === 1 ? "Yes" : "No"}
             </p>
           )}
 
           {/* Info */}
-          <div className="mt-6 p-4 bg-blue-900 bg-opacity-30 border border-blue-400 rounded-xl">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">💡</span>
-              <div className="flex-1">
-                <p className="text-blue-200 text-sm font-semibold mb-1">Approval Condition</p>
-                <p className="text-blue-300 text-xs">
-                  This proposal must receive <strong>over 50% yes votes</strong> to be approved.
-                  {task?.task_type === 1 && (
-                    <span className="block mt-1">
-                      💰 If approved, <strong className="text-green-300">
-                        {(task.budget_amount / 1_000_000_000).toFixed(2)} SUI
-                      </strong> will be transferred to the proposer.
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
+          <div className="mt-6 p-4 bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl">
+            <h4 className="text-blue-200 font-semibold mb-2">Approval Condition</h4>
+            <p className="text-blue-300 text-xs">
+              The proposal is approved if it receives more than <strong>50% yes votes</strong>.
+            </p>
           </div>
         </div>
       )}
 
-      {/* Take Action */}
-      <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl p-6 shadow-lg mb-8">
+      {/* DESCRIPTION */}
+      <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-6 mb-10">
+        <h2 className="text-2xl font-bold text-white mb-4">Description</h2>
+        <p className="text-gray-300 whitespace-pre-wrap">{task?.description}</p>
+      </div>
+
+      {/* DONATIONS */}
+      {task?.donations && task.donations.length > 0 && (
+        <div className="bg-white/5 border border-green-500/40 backdrop-blur-xl rounded-2xl p-6 mb-10">
+          <h2 className="text-xl font-bold text-green-300 mb-4">Donors</h2>
+          <ul className="text-sm text-gray-300 space-y-2">
+            {task.donations.map((donation, idx) => (
+              <li key={idx} className="flex justify-between">
+                <span>
+                  {donation.username || `${donation.donor.slice(0, 6)}...${donation.donor.slice(-4)}`}
+                </span>
+                <span className="font-semibold text-green-300">
+                  {(donation.amount / 1_000_000_000).toFixed(2)} SUI
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ACTION BUTTONS */}
+      <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-6 mb-10">
         <h2 className="text-2xl font-bold text-white mb-4">Take Action</h2>
+
         <div className="flex flex-col md:flex-row gap-4">
           {canJoin && (
             <button
               onClick={handleJoin}
               disabled={!user || isParticipant || isSubmitting}
-              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold disabled:opacity-50"
+              className="flex-1 px-6 py-3 
+              bg-[#2AA5FE] hover:bg-[#53bfff] 
+              text-black font-semibold rounded-lg 
+              shadow-lg transition disabled:opacity-40"
             >
-              {isParticipant ? 'Already Joined' : (isSubmitting ? 'Processing...' : 'Join Task')}
+              {isParticipant ? "Already Joined" : isSubmitting ? "Processing..." : "Join Task"}
             </button>
           )}
 
@@ -552,98 +687,109 @@ return (
                 value={donationAmount}
                 onChange={(e) => setDonationAmount(e.target.value)}
                 placeholder="SUI Amount"
-                className="w-1/2 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                className="w-1/2 px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-[#2AA5FE]"
                 disabled={!user || isSubmitting}
               />
               <button
                 onClick={handleDonate}
-                disabled={!user || isSubmitting || !donationAmount || parseFloat(donationAmount) <= 0}
-                className="w-1/2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
+                disabled={!user || isSubmitting}
+                className="w-1/2 px-6 py-3 
+                bg-green-600 hover:bg-green-700 
+                text-white font-semibold rounded-lg 
+                shadow-lg transition disabled:opacity-40"
               >
-                {isSubmitting ? 'Processing...' : 'Donate'}
+                {isSubmitting ? "Processing..." : "Donate"}
               </button>
             </div>
           )}
         </div>
 
         {!canJoin && !canDonate && task?.status === 0 && (
-          <p className="text-yellow-400 text-sm text-center mt-2">
-            ⏳ This proposal is currently in voting. You may join once it is approved.
+          <p className="text-yellow-400 text-sm text-center mt-3">
+            ⏳ This proposal is under voting. You can join after it gets approved.
           </p>
         )}
-
-        <p className="text-green-400 text-sm text-center mt-4">
-          ⛽ Gas fees are sponsored by the platform.
-        </p>
       </div>
 
-      {/* Comments */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-white mb-6">Comments ({task?.comments.length})</h2>
+      {/* COMMENTS */}
+      <div className="mb-10">
+        <h2 className="text-2xl font-bold mb-6 text-white">Comments ({task?.comments.length})</h2>
 
         <div className="space-y-6">
           {task?.comments.map((comment, index) => (
-            <div key={index} className="flex items-start gap-4">
-              <img src={comment.profile?.avatar} className="w-10 h-10 rounded-full"/>
-              <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="flex items-start gap-4" key={index}>
+              <img src={comment.profile?.avatar} className="w-10 h-10 rounded-full" />
+
+              <div className="flex-1 bg-white/5 border border-white/10 backdrop-blur-xl rounded-xl p-4">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-semibold text-purple-400">
-                    {comment.profile?.username ||
-                      `${comment.author.slice(0, 6)}...${comment.author.slice(-4)}`}
+                  <span className="font-semibold text-[#8BD7FF]">
+                    {comment.profile?.username || `${comment.author.slice(0, 6)}...${comment.author.slice(-4)}`}
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-gray-400">
                     {new Date(comment.timestamp).toLocaleString()}
                   </span>
                 </div>
-                <p className="text-gray-300">{comment.content}</p>
+                <p className="text-gray-200">{comment.content}</p>
               </div>
             </div>
           ))}
 
           {task?.comments.length === 0 && (
-            <div className="text-center py-8 bg-gray-800 rounded-lg">
-              <p className="text-gray-500">No comments yet.</p>
+            <div className="text-center py-8 bg-white/5 border border-white/10 rounded-xl backdrop-blur-xl">
+              <p className="text-gray-400">No comments yet.</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Add Comment */}
-      <form onSubmit={handleCommentSubmit}>
-        <h3 className="text-xl font-bold text-white mb-4">Add a Comment</h3>
+      {/* COMMENT FORM */}
+      <form onSubmit={handleCommentSubmit} className="mb-20">
+        <h3 className="text-xl font-bold text-white mb-4">Add Comment</h3>
 
         <div className="flex items-start gap-4">
-          {user?.avatar && <img src={user.avatar} className="w-10 h-10 rounded-full" />}
+          {user?.avatar && (
+            <img src={user.avatar} className="w-10 h-10 rounded-full" />
+          )}
 
           <div className="flex-1">
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Write your comment here..."
               rows={3}
-              className="w-full px-4 py-3 bg-white/5 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-[#2AA5FE]"
+              placeholder="Write your comment..."
+              className="w-full px-4 py-3 
+              bg-white/5 border border-white/20 
+              rounded-lg text-white placeholder-gray-400 
+              focus:ring-2 focus:ring-[#2AA5FE]"
               disabled={!user || isSubmitting}
             />
 
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-green-400">
-                ✨ Commenting is free! Gas fees are sponsored by the platform.
+                ✨ Gas fees are covered by the platform.
               </p>
+
               <button
                 type="submit"
                 disabled={!user || !newComment.trim() || isSubmitting}
-                className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold disabled:opacity-50"
+                className="px-6 py-2
+                bg-[#2AA5FE] hover:bg-[#53bfff]
+                text-black rounded-lg font-semibold 
+                transition disabled:opacity-40"
               >
-                {isSubmitting ? 'Sending...' : 'Submit Comment'}
+                {isSubmitting ? "Sending..." : "Submit Comment"}
               </button>
             </div>
           </div>
         </div>
 
         {!user && (
-          <p className="text-sm text-yellow-400 mt-2">You must be logged in to comment.</p>
+          <p className="text-sm text-yellow-400 mt-3">
+            You must be logged in to comment.
+          </p>
         )}
       </form>
+
     </main>
   </div>
 );

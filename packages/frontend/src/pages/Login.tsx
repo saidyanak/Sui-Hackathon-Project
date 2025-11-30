@@ -18,17 +18,14 @@ export default function Login() {
         </h1>
 
         <p className="text-lg text-gray-300 leading-relaxed max-w-md">
-          42 topluluğu için Sui Blockchain üzerine kurulmuş yeni nesil görev,
-          topluluk ve dijital kimlik platformu.
+          A next-generation task, community and digital identity platform  
+          built on the Sui Blockchain for the 42 community.
           <br /><br />
-          Zincir üstü doğrulama, NFT rozetler, şeffaf görev kayıtları ve daha fazlası.
+          On-chain verification, NFT badges, transparent task history and much more.
         </p>
 
         <div className="mt-8 text-sm text-gray-400">
-          <span>Sui ile güvenli ve merkeziyetsiz altyapı.</span>
-        </div>
-        <div className="text-sm text-gray-400">
-          <span>Powered by Sui.</span>
+          <span>Secure and decentralized infrastructure powered by Sui.</span>
         </div>
 
       </div>
@@ -38,19 +35,19 @@ export default function Login() {
         <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-10 shadow-2xl">
 
           <h2 className="text-3xl font-bold text-center text-[#8BD7FF] mb-4">
-            Giriş Yap
+            Sign In
           </h2>
 
-          {/* Akış Bilgilendirme */}
+          {/* Info Box */}
           <div className="mb-6 p-4 bg-purple-900 bg-opacity-30 border border-purple-400 rounded-lg">
             <div className="flex items-start gap-3">
               <span className="text-2xl">🔐</span>
               <div className="flex-1">
-                <p className="text-xs text-purple-200 font-semibold mb-1">Nasıl Çalışır?</p>
+                <p className="text-xs text-purple-200 font-semibold mb-1">How It Works</p>
                 <p className="text-xs text-purple-300 leading-relaxed">
-                  1. 42 Intra ile giriş yap<br/>
-                  2. Google ile zkLogin cüzdanı bağla<br/>
-                  3. Blockchain'de görev oluştur, NFT kazan!
+                  1. Sign in with 42 Intra<br/>
+                  2. Connect your zkLogin wallet with Google<br/>
+                  3. Create tasks on-chain and earn NFTs!
                 </p>
               </div>
             </div>
@@ -62,12 +59,12 @@ export default function Login() {
               className="w-full bg-gradient-to-r from-[#00BABC] to-[#2AA5FE] hover:opacity-90 text-white px-6 py-4 rounded-xl text-lg font-semibold shadow-lg flex items-center justify-center gap-3 transition-all"
             >
               <span className="text-2xl">🎓</span>
-              42 Intra ile Giriş Yap
+              Sign in with 42 Intra
             </button>
           </div>
 
           <p className="text-center text-gray-400 text-xs mt-6">
-            Giriş yaparak kullanım şartlarını kabul etmiş olursunuz.
+            By signing in, you agree to the terms of use.
           </p>
         </div>
       </div>
