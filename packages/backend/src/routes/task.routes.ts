@@ -18,10 +18,10 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Kullanıcının wallet adresi olmalı
-    const userWalletAddress = user.suiWalletAddress;
+    // Kullanıcının zkLogin wallet adresi olmalı
+    const userWalletAddress = user.realWalletAddress;
     if (!userWalletAddress) {
-      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
+      return res.status(400).json({ error: 'Cüzdan adresi bulunamadı. Lütfen giriş yaparak zkLogin cüzdanınızı eşleştirin.' });
     }
 
     // Create sponsored task transaction
@@ -48,6 +48,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
         obj.type === 'created' &&
         obj.objectType?.includes('::task::Task')
     );
+    console.log('Created task object:', taskObject);
 
     if (!taskObject || !taskObject.objectId) {
       throw new Error('Task creation failed - no task object found');
@@ -92,10 +93,10 @@ router.post('/:taskId/vote-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid vote type' });
     }
 
-    // Kullanıcının wallet adresi olmalı
-    const userWalletAddress = user.suiWalletAddress;
+    // Kullanıcının zkLogin wallet adresi olmalı
+    const userWalletAddress = user.realWalletAddress;
     if (!userWalletAddress) {
-      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
+      return res.status(400).json({ error: 'Cüzdan adresi bulunamadı. Lütfen giriş yaparak zkLogin cüzdanınızı eşleştirin.' });
     }
 
     const tx = new Transaction();
@@ -139,10 +140,10 @@ router.post('/:taskId/join-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing taskId' });
     }
 
-    // Kullanıcının wallet adresi olmalı
-    const userWalletAddress = user.suiWalletAddress;
+    // Kullanıcının zkLogin wallet adresi olmalı
+    const userWalletAddress = user.realWalletAddress;
     if (!userWalletAddress) {
-      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
+      return res.status(400).json({ error: 'Cüzdan adresi bulunamadı. Lütfen giriş yaparak zkLogin cüzdanınızı eşleştirin.' });
     }
 
     const tx = new Transaction();
@@ -175,6 +176,65 @@ router.post('/:taskId/join-sponsored', authMiddleware, async (req, res) => {
   }
 });
 
+// Sponsorlu bağış yapma (Sponsor cüzdanından bağış - Demo için)
+router.post('/:taskId/donate-sponsored', authMiddleware, async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { amount } = req.body; // MIST cinsinden (1 SUI = 1_000_000_000 MIST)
+    const user = (req as any).user;
+
+    if (!taskId || !amount) {
+      return res.status(400).json({ error: 'taskId ve amount zorunludur' });
+    }
+
+    const donationAmount = BigInt(amount);
+    if (donationAmount <= 0) {
+      return res.status(400).json({ error: 'Bağış miktarı 0\'dan büyük olmalı' });
+    }
+
+    // Kullanıcının zkLogin wallet adresi olmalı
+    const userWalletAddress = user.realWalletAddress;
+    if (!userWalletAddress) {
+      return res.status(400).json({ error: 'Cüzdan adresi bulunamadı. Lütfen giriş yaparak zkLogin cüzdanınızı eşleştirin.' });
+    }
+
+    // Sponsored transaction oluştur
+    const tx = new Transaction();
+    
+    // record_donation_sponsored fonksiyonunu çağır (sadece kayıt tutar, gerçek transfer yok)
+    tx.moveCall({
+      target: `${PACKAGE_ID}::task::record_donation_sponsored`,
+      arguments: [
+        tx.object(taskId),
+        tx.pure.address(userWalletAddress),
+        tx.pure.u64(donationAmount),
+        tx.pure.string(`${user.username || 'Anonim'} tarafından bağışlandı`),
+      ],
+    });
+
+    const result = await executeSponsoredTransaction(tx);
+
+    // User stats güncelle
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totalDonated: { increment: donationAmount },
+        reputationScore: { increment: 15 },
+      },
+    });
+
+    res.json({
+      success: true,
+      digest: result.digest,
+      amount: amount,
+      donor: userWalletAddress,
+    });
+  } catch (error) {
+    console.error('Failed to donate:', error);
+    res.status(500).json({ error: 'Bağış başarısız', details: (error as Error).message });
+  }
+});
+
 // Sponsorlu yorum ekleme
 router.post('/:taskId/comment-sponsored', authMiddleware, async (req, res) => {
   try {
@@ -186,10 +246,10 @@ router.post('/:taskId/comment-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Kullanıcının wallet adresi olmalı
-    const userWalletAddress = user.suiWalletAddress;
+    // Kullanıcının zkLogin wallet adresi olmalı
+    const userWalletAddress = user.realWalletAddress;
     if (!userWalletAddress) {
-      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
+      return res.status(400).json({ error: 'Cüzdan adresi bulunamadı. Lütfen giriş yaparak zkLogin cüzdanınızı eşleştirin.' });
     }
 
     const tx = new Transaction();
@@ -244,9 +304,9 @@ router.post('/:taskId/donate-sponsored', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const userWalletAddress = user.suiWalletAddress;
+    const userWalletAddress = user.realWalletAddress;
     if (!userWalletAddress) {
-      return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
+      return res.status(400).json({ error: 'Cüzdan adresi bulunamadı. Lütfen zkLogin ile bağlayın.' });
     }
 
     // Bağış kaydını blockchain'e yaz (sponsor wallet ile)

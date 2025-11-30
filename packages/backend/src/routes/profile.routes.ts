@@ -11,24 +11,10 @@ router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const user = (req as any).user;
     
-    const userData = await prisma.user.findUnique({
+    const userData: any = await prisma.user.findUnique({
       where: { id: user.id },
-      select: {
-        tasksCreated: true,
-        tasksParticipated: true,
-        votesCount: true,
-        donationsCount: true,
-        totalDonated: true,
-        reputationScore: true,
-        profileId: true,
-        nftAchievements: {
-          select: {
-            achievementType: true,
-            nftObjectId: true,
-            imageUrl: true,
-            createdAt: true,
-          },
-        },
+      include: {
+        nftAchievements: true,
       },
     });
 
@@ -37,17 +23,17 @@ router.get('/stats', authMiddleware, async (req, res) => {
     }
 
     // Claimed achievement type'larını number array olarak döndür
-    const claimedAchievements = userData.nftAchievements.map(a => parseInt(a.achievementType));
+    const claimedAchievements = (userData.nftAchievements || []).map((a: any) => parseInt(a.achievementType));
 
     res.json({
       success: true,
       stats: {
-        tasksCreated: userData.tasksCreated,
-        tasksParticipated: userData.tasksParticipated,
-        votesCount: userData.votesCount,
-        donationsCount: userData.donationsCount,
+        tasksCreated: userData.tasksCreated || 0,
+        tasksParticipated: userData.tasksParticipated || 0,
+        votesCount: userData.votesCount || 0,
+        donationsCount: userData.donationsCount || 0,
         totalDonated: userData.totalDonated?.toString() || '0',
-        reputationScore: userData.reputationScore,
+        reputationScore: userData.reputationScore || 0,
       },
       profileId: userData.profileId,
       claimedAchievements,
@@ -56,6 +42,32 @@ router.get('/stats', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Failed to get user stats:', error);
     res.status(500).json({ error: 'Failed to get stats', details: (error as Error).message });
+  }
+});
+
+// Topluluk bağışı stats güncelleme
+router.post('/add-donation', authMiddleware, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Geçerli bir miktar girin' });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        donationsCount: { increment: 1 },
+        totalDonated: { increment: BigInt(amount) },
+        reputationScore: { increment: 15 },
+      },
+    });
+
+    res.json({ success: true, message: 'Bağış kaydedildi' });
+  } catch (error) {
+    console.error('Failed to add donation:', error);
+    res.status(500).json({ error: 'Bağış kaydedilemedi' });
   }
 });
 
@@ -87,7 +99,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
         target: `${PACKAGE_ID}::profile::create_profile_sponsored`,
         arguments: [
           tx.object(PROFILE_REGISTRY_ID),
-          tx.pure.address(user.suiWalletAddress), // Kullanıcının zkLogin wallet adresi
+          tx.pure.address(user.realWalletAddress), // Kullanıcının zkLogin wallet adresi
           tx.pure.string(intraIdValue),
           tx.pure.string(emailValue),
           tx.pure.string(displayNameValue),
@@ -98,7 +110,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
       const result = await executeSponsoredTransaction(tx);
 
       // Extract profile ID from object changes
-      const profileObject = result.objectChanges?.find(
+      const profileObject: any = result.objectChanges?.find(
         (obj: any) =>
           obj.type === 'created' &&
           obj.objectType?.includes('::profile::UserProfile')
@@ -108,7 +120,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
         throw new Error('Profile creation failed - no profile object found');
       }
 
-      const profileId = profileObject.objectId;
+      const profileId = (profileObject as any)?.objectId;
 
       // Update user in database with profileId
       await prisma.user.update({
@@ -128,7 +140,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
         target: `${PACKAGE_ID}::profile::create_profile_sponsored`,
         arguments: [
           tx.object(PROFILE_REGISTRY_ID),
-          tx.pure.address(user.suiWalletAddress), // Kullanıcının zkLogin wallet adresi
+          tx.pure.address(user.realWalletAddress), // Kullanıcının zkLogin wallet adresi
           tx.pure.string(intraId),
           tx.pure.string(email),
           tx.pure.string(displayName),
@@ -139,7 +151,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
       const result = await executeSponsoredTransaction(tx);
 
       // Extract profile ID from object changes
-      const profileObject = result.objectChanges?.find(
+      const profileObject: any = result.objectChanges?.find(
         (obj: any) =>
           obj.type === 'created' &&
           obj.objectType?.includes('::profile::UserProfile')
@@ -149,7 +161,7 @@ router.post('/create-sponsored', authMiddleware, async (req, res) => {
         throw new Error('Profile creation failed - no profile object found');
       }
 
-      const profileId = profileObject.objectId;
+      const profileId = (profileObject as any)?.objectId;
 
       // Update user in database with profileId
       await prisma.user.update({
@@ -174,7 +186,7 @@ router.post('/migrate-all', async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       where: {
-        suiWalletAddress: { not: null },
+        realWalletAddress: { not: null },
         profileId: null, // Henüz profili olmayanlar
       },
     });
@@ -188,7 +200,7 @@ router.post('/migrate-all', async (req, res) => {
           target: `${PACKAGE_ID}::profile::create_profile_sponsored`,
           arguments: [
             tx.object(PROFILE_REGISTRY_ID),
-            tx.pure.address(user.suiWalletAddress), // Kullanıcının zkLogin wallet adresi
+            tx.pure.address(user.realWalletAddress), // Kullanıcının zkLogin wallet adresi
             tx.pure.string(String(user.intraId || '')),
             tx.pure.string(user.email),
             tx.pure.string(user.username || ''),
@@ -198,21 +210,21 @@ router.post('/migrate-all', async (req, res) => {
         const result = await executeSponsoredTransaction(tx);
 
         // Extract profile ID
-        const profileObject = result.objectChanges?.find(
+        const profileObject: any = result.objectChanges?.find(
           (obj: any) =>
             obj.type === 'created' &&
             obj.objectType?.includes('::profile::UserProfile')
         );
 
-        if (profileObject && profileObject.objectId) {
+        if (profileObject && (profileObject as any).objectId) {
           await prisma.user.update({
             where: { id: user.id },
-            data: { profileId: profileObject.objectId },
+            data: { profileId: (profileObject as any).objectId },
           });
           results.push({
             userId: user.id,
             email: user.email,
-            profileId: profileObject.objectId,
+            profileId: (profileObject as any).objectId,
             status: 'success',
           });
         } else {
@@ -251,7 +263,7 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
     const user = (req as any).user;
     const { achievementType } = req.body;
 
-    console.log('NFT Claim request:', { achievementType, walletAddress: user.suiWalletAddress });
+    console.log('NFT Claim request:', { achievementType, walletAddress: user.realWalletAddress });
 
     if (achievementType === undefined) {
       return res.status(400).json({ error: 'Achievement type is required' });
@@ -273,7 +285,7 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
     }
 
     // Kullanıcının wallet adresi olmalı
-    const userWalletAddress = user.suiWalletAddress;
+    const userWalletAddress = user.realWalletAddress;
     if (!userWalletAddress) {
       return res.status(400).json({ error: 'User wallet address not found. Please login again.' });
     }
@@ -308,8 +320,8 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
     // Achievement eligibility kontrolü
     let eligible = false;
     switch (achievementType) {
-      case 0: // First Task
-        eligible = stats.tasksParticipated >= 1;
+      case 0: // First Task (allow after first participation OR first creation)
+        eligible = stats.tasksParticipated >= 1 || stats.tasksCreated >= 1;
         break;
       case 1: // First Donation
         eligible = stats.donationsCount >= 1;
@@ -371,7 +383,7 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
     const result = await executeSponsoredTransaction(tx);
 
     // NFT object ID'yi bul
-    const nftObject = result.objectChanges?.find(
+    const nftObject: any = result.objectChanges?.find(
       (obj: any) =>
         obj.type === 'created' &&
         obj.objectType?.includes('::nft::AchievementNFT')
@@ -394,7 +406,7 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
     await prisma.nFTAchievement.create({
       data: {
         userId: user.id,
-        nftObjectId: nftObject?.objectId || null,
+        nftObjectId: (nftObject as any)?.objectId || null,
         achievementType: String(achievementType),
         imageUrl: `https://api.dicebear.com/7.x/shapes/svg?seed=achievement-${achievementType}`,
       },
@@ -403,7 +415,7 @@ router.post('/claim-nft-sponsored', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       digest: result.digest,
-      nftId: nftObject?.objectId || null,
+      nftId: (nftObject as any)?.objectId || null,
       achievementName: achievementNames[achievementType] || 'Achievement',
       message: 'Achievement NFT başarıyla claim edildi!',
     });

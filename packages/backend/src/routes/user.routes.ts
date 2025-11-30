@@ -2,19 +2,18 @@ import { Router } from 'express';
 import prisma from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware } from '../middlewares/auth.middleware';
+
 const router = Router();
-// Achievement ve NFT mintleme endpointi
+
+// Achievement ve NFT mintleme endpointi (tek, temiz versiyon)
 router.post('/mint-achievement', authMiddleware, async (req, res) => {
   try {
-    const { achievementType, taskId, tasksCompleted, donationsMade, totalDonatedAmount } = req.body;
+    const { achievementType, taskId } = req.body;
     const user = req.user as any;
-    if (!user.suiWalletAddress) {
-      return res.status(400).json({ error: 'Kullanıcının Sui wallet adresi yok.' });
-    }
 
-    // Move contract ile NFT mintle (örnek, gerçek Move fonksiyonunu çağırmak için Sui SDK ile entegrasyon gerekir)
-    // Burada Move fonksiyonunu çağırdığını varsayalım
-    // const result = await callMoveMintAchievement(...);
+    if (!user.realWalletAddress) {
+      return res.status(400).json({ error: 'zkLogin cüzdanı bağlı değil. Lütfen giriş yapın.' });
+    }
 
     // Benzersiz NFT ObjectId üret
     const nftObjectId = uuidv4();
@@ -26,7 +25,7 @@ router.post('/mint-achievement', authMiddleware, async (req, res) => {
           userId: user.id,
           achievementType: achievementType,
           taskId: taskId,
-          nftObjectId: nftObjectId, // Benzersiz NFT objesi
+          nftObjectId: nftObjectId,
           metadataUrl: '',
           imageUrl: '',
         },
@@ -34,45 +33,13 @@ router.post('/mint-achievement', authMiddleware, async (req, res) => {
       res.json({ success: true, nftAchievement });
     } catch (prismaError: any) {
       if (prismaError.code === 'P2002') {
-        return res.status(409).json({ error: 'Bu NFT zaten mintlenmiş. Benzersiz bir NFT oluşturun.' });
+        return res.status(409).json({ error: 'Bu NFT zaten mintlenmiş.' });
       }
       throw prismaError;
     }
   } catch (error) {
     console.error('Failed to mint achievement NFT:', error);
-    res.status(500).json({ error: 'Failed to mint achievement NFT' });
-  }
-});
-// Achievement ve NFT mintleme endpointi
-router.post('/mint-achievement', authMiddleware, async (req, res) => {
-  try {
-    const { achievementType, taskId, tasksCompleted, donationsMade, totalDonatedAmount } = req.body;
-    const user = req.user as any;
-    if (!user.suiWalletAddress) {
-      return res.status(400).json({ error: 'Kullanıcının Sui wallet adresi yok.' });
-    }
-
-    // Move contract ile NFT mintle (örnek, gerçek Move fonksiyonunu çağırmak için Sui SDK ile entegrasyon gerekir)
-    // Burada Move fonksiyonunu çağırdığını varsayalım
-    // const result = await callMoveMintAchievement(...);
-
-    // Veritabanına NFTAchievement kaydı ekle
-    const prisma = require('../config/database').default;
-    const nftAchievement = await prisma.nFTAchievement.create({
-      data: {
-        userId: user.id,
-        achievementType: achievementType,
-        taskId: taskId,
-        nftObjectId: 'move_nft_id', // Move'dan dönen NFT objesinin ID'si
-        metadataUrl: '',
-        imageUrl: '',
-      },
-    });
-
-    res.json({ success: true, nftAchievement });
-  } catch (error) {
-    console.error('Failed to mint achievement NFT:', error);
-    res.status(500).json({ error: 'Failed to mint achievement NFT' });
+    res.status(500).json({ error: 'NFT mintleme başarısız' });
   }
 });
 
@@ -82,9 +49,7 @@ router.post('/wallet', authMiddleware, async (req, res) => {
     const { walletAddress } = req.body;
     const userId = (req.user as any).id;
 
-    // Real wallet is saved separately from virtual wallet
-    // suiWalletAddress = Virtual wallet (for sponsored transactions)
-    // realWalletAddress = Real wallet (user's connected wallet)
+    // realWalletAddress = zkLogin cüzdanı (tek cüzdan)
     await prisma.user.update({
       where: { id: userId },
       data: { realWalletAddress: walletAddress },
@@ -108,12 +73,12 @@ router.post('/profiles-by-wallets', async (req, res) => {
 
     const users = await prisma.user.findMany({
       where: {
-        suiWalletAddress: {
+        realWalletAddress: {
           in: addresses,
         },
       },
       select: {
-        suiWalletAddress: true,
+        realWalletAddress: true,
         username: true,
         avatar: true,
         firstName: true,

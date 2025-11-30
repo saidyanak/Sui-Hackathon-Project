@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
 import Callback from './pages/Callback';
+import ZkLogin from './pages/ZkLogin';
 import Home from './pages/Home';
 import CreateTask from './pages/CreateTask';
 import TaskDetail from './pages/TaskDetail';
@@ -20,11 +21,16 @@ const networks = {
   testnet: { url: getFullnodeUrl('testnet') },
 };
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+function ProtectedRoute({ children, requireWallet = true }: { children: React.ReactNode; requireWallet?: boolean }) {
+  const { isAuthenticated, user } = useAuthStore();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Eğer wallet zorunlu ve kullanıcının wallet'ı yoksa zkLogin'e yönlendir
+  if (requireWallet && !user?.realWalletAddress) {
+    return <Navigate to="/zklogin" replace />;
   }
 
   return <>{children}</>;
@@ -62,6 +68,14 @@ function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/auth/callback" element={<Callback />} />
+              <Route 
+                path="/zklogin" 
+                element={
+                  <ProtectedRoute requireWallet={false}>
+                    <ZkLogin />
+                  </ProtectedRoute>
+                } 
+              />
               <Route
                 path="/"
                 element={

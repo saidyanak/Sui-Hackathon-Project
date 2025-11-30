@@ -1,7 +1,7 @@
 import api from './api';
 
 interface UserProfile {
-  suiWalletAddress: string;
+  realWalletAddress: string;
   username: string;
   avatar: string;
   firstName: string | null;

@@ -804,6 +804,44 @@ module community_platform::task {
         false
     }
 
+    // Gerçek SUI bağışı - Kullanıcıdan sponsor cüzdanına transfer
+    // Frontend'den çağrılır, kullanıcı kendi coin'ini gönderir
+    public entry fun donate_to_sponsor(
+        task: &mut Task,
+        payment: Coin<SUI>,
+        sponsor_address: address,
+        message: vector<u8>,
+        ctx: &mut TxContext
+    ) {
+        let donor = tx_context::sender(ctx);
+        let amount = coin::value(&payment);
+        let timestamp = tx_context::epoch_timestamp_ms(ctx);
+        let task_id = object::uid_to_inner(&task.id);
+
+        // SUI'yi sponsor adresine transfer et
+        transfer::public_transfer(payment, sponsor_address);
+
+        // Bağış kaydı oluştur
+        let donation = DonationRecord {
+            donor,
+            amount,
+            message: string::utf8(message),
+            timestamp,
+        };
+
+        vector::push_back(&mut task.donations, donation);
+
+        // Event emit et
+        event::emit(DonationRecorded {
+            task_id,
+            donor,
+            amount,
+            message: string::utf8(message),
+            total_donations: vector::length(&task.donations),
+            timestamp,
+        });
+    }
+
     // Sponsorlu bağış kaydı - Backend sponsor wallet bağışı kaydeder
     // Gerçek SUI transferi frontend'den sponsor wallet'a yapılır
     public entry fun record_donation_sponsored(

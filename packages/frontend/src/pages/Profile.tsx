@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 import { profileService } from '../services/profileService';
+import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/authStore';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
@@ -173,7 +174,7 @@ export default function Profile() {
             });
 
             // NFT'leri yükle
-            const walletAddress = currentAccount?.address || user?.suiWalletAddress;
+            const walletAddress = currentAccount?.address || user?.realWalletAddress;
             if (walletAddress) {
               const userNFTs = await profileService.getUserNFTs(walletAddress);
               setNFTs(userNFTs);
@@ -269,18 +270,12 @@ export default function Profile() {
   };
 
   const handleClaimAchievement = async (achievementType: number) => {
-    if (!profileId) {
-      toast.error('On-chain profil bulunamadı. Lütfen önce profil oluşturun.');
-      return;
-    }
-
     try {
       setClaiming(achievementType);
 
       // Backend üzerinden sponsored NFT claim
       const response = await api.post('/api/profile/claim-nft-sponsored', {
         achievementType,
-        profileId,
       });
 
       if (response.data.success) {
@@ -384,35 +379,14 @@ export default function Profile() {
                     🎓 42: {profile.intraId}
                   </span>
                 )}
-                {user?.suiWalletAddress && (
-                  <span className="flex items-center gap-1 font-mono text-xs">
-                    💼 {user.suiWalletAddress.slice(0, 8)}...{user.suiWalletAddress.slice(-6)}
-                  </span>
-                )}
+                {/* Virtual wallet gösterimi kaldırıldı; yalnızca zkLogin adresi gösterilir */}
               </div>
 
               {/* On-chain status badge */}
-              {profile.isWeb2Only ? (
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 bg-yellow-500/20 border border-yellow-500/50 rounded-lg px-3 py-1 text-yellow-300 text-sm">
-                    ⚠️ On-chain profil henüz oluşturulmadı
-                  </div>
-                  <div>
-                    <button
-                      onClick={handleCreateProfile}
-                      disabled={creatingProfile}
-                      className="bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold px-6 py-2 rounded-xl hover:opacity-90 transition disabled:opacity-50"
-                    >
-                      {creatingProfile ? '⏳ Oluşturuluyor...' : '🚀 On-chain Profil Oluştur'}
-                    </button>
-                    <p className="text-xs text-gray-500 mt-1">
-                      NFT almak için on-chain profil gerekli
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="inline-flex items-center gap-2 bg-green-500/20 border border-green-500/50 rounded-lg px-3 py-1 text-green-300 text-sm">
-                  ✅ On-chain profil aktif
+              {/* On-chain profile flow removed; zkLogin wallet is sufficient */}
+              {user?.realWalletAddress && (
+                <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-white text-sm font-mono">
+                  🪪 zkLogin: {user.realWalletAddress.slice(0, 10)}...{user.realWalletAddress.slice(-6)}
                 </div>
               )}
             </div>

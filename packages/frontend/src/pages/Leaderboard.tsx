@@ -21,7 +21,7 @@ interface Task {
 }
 
 interface UserProfile {
-  suiWalletAddress: string;
+  realWalletAddress: string;
   username: string;
   avatar: string;
 }
@@ -84,7 +84,7 @@ export default function Leaderboard() {
 
         // Fetch user profiles
         const profiles = await userService.getProfilesByWalletAddresses(allAddresses);
-        const profilesMap = new Map(profiles.map(p => [p.suiWalletAddress, p]));
+        const profilesMap = new Map(profiles.map(p => [p.realWalletAddress, p]));
 
         // Build leaderboard entries
         const entries: LeaderboardEntry[] = Array.from(userStats.entries()).map(([address, stats]) => {

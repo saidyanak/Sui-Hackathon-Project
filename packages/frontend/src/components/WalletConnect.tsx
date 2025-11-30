@@ -11,60 +11,56 @@ export function WalletConnect() {
   const [balance, setBalance] = useState<number | null>(null);
   const { user } = useAuthStore();
 
-  const realWalletAddress = currentAccount?.address;
+  // zkLogin cüzdanı veya bağlı cüzdan
+  const walletAddress = user?.realWalletAddress || currentAccount?.address;
 
-  // Save real wallet address to backend (separate from virtual wallet)
-  useEffect(() => {
-    if (realWalletAddress) {
-      api.post('/api/user/wallet', { walletAddress: realWalletAddress })
-        .then(() => {
-          console.log('✅ Real wallet saved:', realWalletAddress);
-        })
-        .catch((error) => {
-          console.error('Failed to save real wallet address:', error);
-        });
-    }
-  }, [realWalletAddress]);
+  // Sui adresi geçerli mi kontrol et (0x ile başlamalı, 66 karakter olmalı)
+  const isValidSuiAddress = (addr: string | undefined): boolean => {
+    if (!addr) return false;
+    return /^0x[a-fA-F0-9]{64}$/.test(addr);
+  };
 
-  // Fetch SUI balance from real wallet
+  // zkLogin cüzdanı sabit - harici cüzdan bağlansa bile değişmez
+  // (Harici cüzdan backend'e kaydedilmez)
+
+  // Fetch SUI balance
   useEffect(() => {
     const fetchBalance = async () => {
-      if (!realWalletAddress) return;
+      if (!walletAddress || !isValidSuiAddress(walletAddress)) {
+        setBalance(null);
+        return;
+      }
       try {
-        const result = await client.getBalance({ owner: realWalletAddress });
-        const sui = Number(result.totalBalance) / 1_000_000_000; // mist → SUI
+        const result = await client.getBalance({ owner: walletAddress });
+        const sui = Number(result.totalBalance) / 1_000_000_000;
         setBalance(sui);
       } catch (err) {
         console.error('Failed to fetch balance:', err);
+        setBalance(null);
       }
     };
 
     fetchBalance();
-  }, [realWalletAddress]);
+  }, [walletAddress]);
 
   return (
     <div className="flex items-center gap-4">
-      {/* Virtual Wallet Info - Always shown when logged in */}
-      {user && (
-        <div className="flex flex-col items-end mr-2">
-          <span className="text-xs text-gray-400">Virtual Wallet</span>
-          <span className="text-xs text-purple-300 font-mono">
-            {user.suiWalletAddress ? `${user.suiWalletAddress.slice(0, 6)}...${user.suiWalletAddress.slice(-4)}` : 'N/A'}
-          </span>
-        </div>
-      )}
-
-      {/* Real Wallet Info - Only shown when wallet is connected */}
-      {realWalletAddress && (
+      {/* zkLogin Wallet - Tek cüzdan gösterimi */}
+      {walletAddress && (
         <div className="flex flex-col items-end">
-          <span className="text-xs text-green-400">Real Wallet 💎</span>
-          <span className="text-sm text-purple-400 font-semibold">
-            {balance !== null ? `${balance.toFixed(2)} SUI` : 'Yükleniyor...'}
+          <span className="text-xs text-cyan-400">🪪 zkLogin</span>
+          <span className="text-xs text-purple-300 font-mono">
+            {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
           </span>
+          {balance !== null && (
+            <span className="text-sm text-purple-400 font-semibold">
+              {balance.toFixed(2)} SUI
+            </span>
+          )}
         </div>
       )}
 
-      {/* Connect Button */}
+      {/* Connect Button - dapp-kit ile harici cüzdan bağlama */}
       <ConnectButton className="!bg-gradient-to-r !from-purple-600 !to-pink-600 !text-white !px-6 !py-2 !rounded-lg !font-medium hover:!opacity-90 !transition-opacity" />
     </div>
   );

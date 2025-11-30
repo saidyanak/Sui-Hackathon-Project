@@ -32,6 +32,20 @@ export default function CreateTask() {
     setLoading(true);
     setError('');
 
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setLoading(false);
+      setError('Giriş bulunamadı. Lütfen Intra ile giriş yapın.');
+      toast.error('Giriş bulunamadı. Lütfen Intra ile giriş yapın.');
+      return;
+    }
+    if (!user?.realWalletAddress) {
+      setLoading(false);
+      setError('zkLogin cüzdanı bağlı değil. Lütfen giriş yapın veya zkLogin ile cüzdan bağlayın.');
+      toast.error('zkLogin cüzdanı bağlı değil.');
+      return;
+    }
+
     try {
       // Backend'e sponsorlu task oluşturma isteği gönder
       const response = await api.post('/api/tasks/create-sponsored', {
@@ -49,6 +63,7 @@ export default function CreateTask() {
         toast.success('Teklif başarıyla oluşturuldu!');
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
         navigate('/');
+        console.log('Task created successfully:', response.data);
       }
     } catch (err: any) {
       console.error("İşlem sırasında hata oluştu:", err);

@@ -3,17 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSuiClient, useSignAndExecuteTransaction, useCurrentAccount } from '@mysten/dapp-kit';
 import { SuiObjectData } from '@mysten/sui/client';
-import { TransactionBlock } from '@mysten/sui.js/transactions';
+import { Transaction } from '@mysten/sui/transactions';
+import { toast } from 'react-hot-toast';
 import { userService } from '../services/userService';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
 import { TaskCompletionClaim } from '../components/TaskCompletionClaim';
 
 const PACKAGE_ID = import.meta.env.VITE_SUI_PACKAGE_ID;
+const SPONSOR_ADDRESS = '0xc41d4455273841e9cb81ae9f6034c0966a61bb540892a5fd8caa9614e2c44115';
 
 // --- Interfaces ---
 interface UserProfile {
-  suiWalletAddress: string;
+  realWalletAddress: string;
   username: string;
   avatar: string;
 }
@@ -116,7 +118,7 @@ export default function TaskDetail() {
       const uniqueAddresses = [...new Set(authorAddresses)];
       
       const profiles = await userService.getProfilesByWalletAddresses(uniqueAddresses);
-      const profilesMap = new Map(profiles.map(p => [p.suiWalletAddress, p]));
+      const profilesMap = new Map(profiles.map(p => [p.realWalletAddress, p]));
       const getProfile = (addr: string) => profilesMap.get(addr);
       const creatorProfile = getProfile(parsedData.creatorAddress);
 
@@ -139,7 +141,7 @@ export default function TaskDetail() {
       if (donorAddresses.length > 0) {
         const profiles = await userService.getProfilesByWalletAddresses(donorAddresses);
         profiles.forEach(profile => {
-          donorProfiles[profile.suiWalletAddress] = { username: profile.username };
+          donorProfiles[profile.realWalletAddress] = { username: profile.username };
         });
         donations = donations.map(d => ({ ...d, username: donorProfiles[d.donor]?.username }));
       }
@@ -168,50 +170,48 @@ export default function TaskDetail() {
       };
     },
     enabled: !!taskId && !!client,
+    staleTime: 30000, // 30 saniye boyunca cache'den oku
+    refetchOnWindowFocus: false, // Pencere odaklanınca yeniden çekme
   });
 
   const { data: hasVotedStatus, isLoading: isLoadingHasVoted } = useQuery({
-    queryKey: ['hasVoted', taskId, user?.suiWalletAddress],
+    queryKey: ['hasVoted', taskId, user?.realWalletAddress],
     queryFn: async () => {
-      if (!taskId || !user?.suiWalletAddress) return false;
+      if (!taskId || !user?.realWalletAddress) return false;
 
-      const tx = new TransactionBlock();
+      const tx = new Transaction();
       const target = `${PACKAGE_ID}::task::has_voted`;
-      const args = [tx.object(taskId), tx.pure.address(user.suiWalletAddress)];
+      const args = [tx.object(taskId), tx.pure.address(user.realWalletAddress)];
       
-      console.log('hasVoted: Calling moveCall with target:', target, 'and arguments:', args);
-
       tx.moveCall({
         target: target,
         arguments: args,
       });
 
       const result = await client.devInspectTransactionBlock({
-        sender: user.suiWalletAddress,
+        sender: user.realWalletAddress,
         transactionBlock: tx,
       });
-      console.log('hasVoted: devInspectTransactionBlock result:', result);
 
       if (result.results && result.results[0] && result.results[0].returnValues) {
         const [value, type] = result.results[0].returnValues[0];
-        console.log('hasVoted: Raw return value:', value, 'type:', type);
         const hasVotedResult = value[0] === 1;
-        console.log('hasVoted: Parsed hasVotedResult:', hasVotedResult);
         return hasVotedResult;
       }
-      console.log('hasVoted: No return value found, returning false.');
       return false;
     },
-    enabled: !!taskId && !!user?.suiWalletAddress && !!client,
+    enabled: !!taskId && !!user?.realWalletAddress && !!client,
+    staleTime: 60000, // 1 dakika cache
+    refetchOnWindowFocus: false,
   });
 
-  const runMutation = (transaction: TransactionBlock, successMessage: string) => {
+  const runMutation = (transaction: Transaction, successMessage: string) => {
     setIsSubmitting(true);
     signAndExecute({ transaction }, {
       onSuccess: () => {
         console.log(successMessage);
         queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-        queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.suiWalletAddress] }); // Invalidate hasVoted query
+        queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.realWalletAddress] }); // Invalidate hasVoted query
         setIsSubmitting(false);
         setDonationAmount('');
       },
@@ -249,18 +249,79 @@ export default function TaskDetail() {
     }
   };
 
-  const handleDonate = () => {
+  const handleDonate = async () => {
     const amount = parseFloat(donationAmount);
-    if (!taskId || isNaN(amount) || amount <= 0) return;
+    if (!taskId || isNaN(amount) || amount <= 0) {
+      alert('Geçerli bir bağış miktarı girin');
+      return;
+    }
+
+    if (!user) {
+      alert('Bağış yapmak için giriş yapmalısınız.');
+      return;
+    }
+
+    if (!user.realWalletAddress) {
+      alert('Cüzdan bulunamadı! Lütfen zkLogin ile cüzdan bağlayın.');
+      return;
+    }
 
     const amountInMist = Math.floor(amount * 1_000_000_000);
-    const tx = new TransactionBlock();
-    const coin = tx.splitCoins(tx.gas, [amountInMist]);
-    tx.moveCall({
-      target: `${PACKAGE_ID}::task::donate`,
-      arguments: [tx.object(taskId), coin, tx.pure.string('Donation from frontend')],
-    });
-    runMutation(tx, 'Successfully donated to task!');
+    
+    setIsSubmitting(true);
+    try {
+      // Harici cüzdan bağlıysa gerçek SUI transferi yap
+      if (currentAccount?.address) {
+        // Gerçek bağış - kullanıcının cüzdanından sponsor'a
+        const tx = new Transaction();
+        const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amountInMist)]);
+        
+        tx.moveCall({
+          target: `${PACKAGE_ID}::task::donate_to_sponsor`,
+          arguments: [
+            tx.object(taskId),
+            coin,
+            tx.pure.address(SPONSOR_ADDRESS),
+            tx.pure.string(`${user.username || 'Anonim'} tarafından bağış`),
+          ],
+        });
+
+        signAndExecute(
+          { transaction: tx },
+          {
+            onSuccess: () => {
+              toast.success(`🎉 ${amount} SUI gerçek bağış yapıldı!`);
+              setDonationAmount('');
+              queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+              queryClient.invalidateQueries({ queryKey: ['tasks'] });
+              setIsSubmitting(false);
+            },
+            onError: (error: any) => {
+              console.error('Gerçek bağış hatası:', error);
+              toast.error('Bağış başarısız: ' + error.message);
+              setIsSubmitting(false);
+            },
+          }
+        );
+      } else {
+        // Harici cüzdan yok - Backend sponsored demo bağış
+        const response = await api.post(`/api/tasks/${taskId}/donate-sponsored`, {
+          amount: amountInMist,
+        });
+
+        if (response.data.success) {
+          toast.success(`🎉 ${amount} SUI (demo) bağışlandı!`);
+          setDonationAmount('');
+          queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+          queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        }
+        setIsSubmitting(false);
+      }
+    } catch (error: any) {
+      console.error('Bağış hatası:', error);
+      alert('Bağış yapılırken hata: ' + (error.response?.data?.error || error.message));
+      setIsSubmitting(false);
+    }
   };
   
   const handleVote = async (voteType: number) => {
@@ -271,10 +332,8 @@ export default function TaskDetail() {
       return;
     }
 
-    // ProfileId'yi localStorage'dan al
-    const profileId = localStorage.getItem('userProfileId');
-    if (!profileId) {
-      alert('Profil bulunamadı! Lütfen çıkış yapıp tekrar giriş yapın.');
+    if (!user.realWalletAddress) {
+      alert('Cüzdan bulunamadı! Lütfen zkLogin ile cüzdan bağlayın.');
       return;
     }
 
@@ -283,7 +342,6 @@ export default function TaskDetail() {
       // Backend'e sponsorlu oy isteği gönder
       const response = await api.post(`/api/tasks/${taskId}/vote-sponsored`, {
         voteType,
-        profileId, // UserProfile object ID ekle
       });
 
       if (response.data.success) {
@@ -296,7 +354,7 @@ export default function TaskDetail() {
       // İşlem başarılı da olsa başarısız da olsa, en güncel veriyi çekmek için invalidate et.
       queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] }); // Ana sayfadaki listeyi de yenile
-      queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.suiWalletAddress] }); // Invalidate hasVoted query
+      queryClient.invalidateQueries({ queryKey: ['hasVoted', taskId, user?.realWalletAddress] });
       setIsSubmitting(false);
     }
   };
@@ -368,11 +426,11 @@ export default function TaskDetail() {
   const yesPercentage = totalVotes > 0 ? Math.round((yesVotes / totalVotes) * 100) : 0;
 
   // Check if user has voted
-  const userVote = task?.votes.find(v => v.voter === user?.suiWalletAddress);
+  const userVote = task?.votes.find(v => v.voter === user?.realWalletAddress);
   const hasVoted = hasVotedStatus; // Use the result from the new query
 
   // Check if user is participant - use user's wallet address from auth store
-  const isParticipant = user?.suiWalletAddress && task?.participants.includes(user.suiWalletAddress);
+  const isParticipant = user?.realWalletAddress && task?.participants.includes(user.realWalletAddress);
   const canJoin = task?.task_type === 0 && task?.status === 1; // Only PARTICIPATION type and ACTIVE status
   const canDonate = task?.task_type === 1 || task?.task_type === 2;
   const isVoting = task?.status === 0;
@@ -434,14 +492,14 @@ export default function TaskDetail() {
           </div>
         </div>
 
-        {/* Task Completion Claim Component */}
-        {user && task && (
+        {/* Task Completion Claim Component - Sadece profileId varsa göster */}
+        {user && task && localStorage.getItem('userProfileId') && (
           <TaskCompletionClaim
             taskId={task.id}
             profileId={localStorage.getItem('userProfileId') || ''}
             taskTitle={task.title}
             isParticipant={!!isParticipant}
-            isCreator={task.creator.address === user.suiWalletAddress}
+            isCreator={task.creator.address === user.realWalletAddress}
             taskType={task.task_type}
             taskStatus={task.status}
             onClaimed={() => {

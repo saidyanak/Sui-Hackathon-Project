@@ -5,7 +5,9 @@ import { WalletConnect } from "../components/WalletConnect";
 import { taskService } from "../services/taskService";
 import { useQuery } from "@tanstack/react-query";
 import TaskCard from "../components/TaskCard";
-import { useDisconnectWallet } from "@mysten/dapp-kit";
+import { useDisconnectWallet, useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { toast } from "react-hot-toast";
 import api from "../services/api";
 
 interface UserStats {
@@ -44,7 +46,14 @@ export default function Home() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { mutate: disconnectWallet } = useDisconnectWallet();
+  const currentAccount = useCurrentAccount();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const [filter, setFilter] = useState<string>("all");
+  const [showDonateModal, setShowDonateModal] = useState(false);
+  const [donationAmount, setDonationAmount] = useState("");
+  const [isDonating, setIsDonating] = useState(false);
+
+  const SPONSOR_ADDRESS = "0xc41d4455273841e9cb81ae9f6034c0966a61bb540892a5fd8caa9614e2c44115";
 
   const { data: tasks = [], isLoading: loading, error } = useQuery({
     queryKey: ["tasks"],
@@ -72,7 +81,7 @@ export default function Home() {
           const { userService } = await import("../services/userService");
           const profiles = await userService.getProfilesByWalletAddresses(uniqueAddresses);
           profiles.forEach((p: any) => {
-            profilesMap[p.suiWalletAddress] = { 
+            profilesMap[p.realWalletAddress] = { 
               username: p.username,
               avatar: p.avatar 
             };
@@ -124,6 +133,57 @@ export default function Home() {
       loadStats();
     }, []);
 
+  // Topluluğa bağış yap
+  const handleCommunityDonate = async () => {
+    const amount = parseFloat(donationAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Geçerli bir miktar girin");
+      return;
+    }
+
+    if (!currentAccount?.address) {
+      toast.error("Bağış yapmak için harici cüzdan bağlamalısınız");
+      return;
+    }
+
+    const amountInMist = Math.floor(amount * 1_000_000_000);
+    setIsDonating(true);
+
+    try {
+      const tx = new Transaction();
+      const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amountInMist)]);
+      tx.transferObjects([coin], tx.pure.address(SPONSOR_ADDRESS));
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: async () => {
+            toast.success(`🎉 ${amount} SUI topluluğa bağışlandı!`);
+            setDonationAmount("");
+            setShowDonateModal(false);
+            setIsDonating(false);
+            
+            // Stats'ı güncelle
+            try {
+              await api.post("/api/profile/add-donation", { amount: amountInMist });
+            } catch (e) {
+              console.log("Stats update error:", e);
+            }
+          },
+          onError: (error: any) => {
+            console.error("Bağış hatası:", error);
+            toast.error("Bağış başarısız: " + error.message);
+            setIsDonating(false);
+          },
+        }
+      );
+    } catch (error: any) {
+      console.error("Bağış hatası:", error);
+      toast.error("Bağış yapılırken hata oluştu");
+      setIsDonating(false);
+    }
+  };
+
 
 
 
@@ -133,8 +193,6 @@ export default function Home() {
     } catch (e) {
       console.log("Wallet disconnect error:", e);
     }
-
-    localStorage.removeItem("userProfileId");
 
     logout();
     navigate("/login");
@@ -175,6 +233,63 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-[#0A1A2F] via-[#0C2238] to-[#071018] text-white">
+
+      {/* 💝 BAĞIŞ MODAL */}
+      {showDonateModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+          <div className="bg-gray-800 border border-purple-500/50 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="text-5xl mb-4">💝</div>
+              <h2 className="text-xl font-bold text-white mb-2">Topluluğa Bağış Yap</h2>
+              <p className="text-gray-400 text-sm">
+                Bağışınız topluluk kasasına gidecek ve projeleri desteklemek için kullanılacak.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-300 text-sm mb-2">Bağış Miktarı (SUI)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.01"
+                value={donationAmount}
+                onChange={(e) => setDonationAmount(e.target.value)}
+                placeholder="0.5"
+                className="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-3 text-white focus:border-purple-500 focus:outline-none"
+              />
+            </div>
+
+            {!currentAccount?.address && (
+              <p className="text-yellow-400 text-xs text-center mb-4 p-3 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+                ⚠️ Bağış yapmak için harici cüzdan bağlamalısınız (Connect Wallet)
+              </p>
+            )}
+
+            <div className="p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg mb-4">
+              <p className="text-purple-300 text-xs">
+                <strong>Topluluk Kasası:</strong><br/>
+                <span className="font-mono text-[10px]">{SPONSOR_ADDRESS.slice(0, 20)}...{SPONSOR_ADDRESS.slice(-8)}</span>
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDonateModal(false)}
+                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-4 rounded-xl transition"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={handleCommunityDonate}
+                disabled={isDonating || !currentAccount?.address || !donationAmount}
+                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-4 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDonating ? "Gönderiliyor..." : "💝 Bağışla"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SABİT ÜST MENÜ */}
       <header className="
@@ -265,6 +380,14 @@ export default function Home() {
                 
           </div>
         )}
+
+        {/* 💝 TOPLULUĞA BAĞIŞ BUTONU */}
+        <button
+          onClick={() => setShowDonateModal(true)}
+          className="mt-4 w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:from-purple-700 hover:to-pink-700 transition shadow-lg flex items-center justify-center gap-2"
+        >
+          💝 Topluluğa Bağış Yap
+        </button>
 
         {/* ÇIKIŞ BUTONU */}
         <div className="mt-auto">
