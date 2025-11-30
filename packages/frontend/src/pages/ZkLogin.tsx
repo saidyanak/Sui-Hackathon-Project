@@ -116,11 +116,10 @@ export default function ZkLogin() {
     if (step === 'connecting' || step === 'success') return;
     if (hasGoogleData) return;
 
+    // Sadece mevcut cüzdan varsa modal göster
+    // Yoksa kullanıcı butona basana kadar bekle (otomatik yönlendirme yok)
     if (user?.realWalletAddress) {
       setShowConfirmModal(true);
-    } else {
-      const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      window.location.href = `${backendUrl}/api/auth/google`;
     }
   }, [user, step]);
 

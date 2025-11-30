@@ -10,8 +10,10 @@ interface User {
   intraId?: number;
   googleId?: string;
   role: string;
-  // zkLogin cüzdanı (tek cüzdan)
+  // zkLogin cüzdanı
   realWalletAddress?: string;
+  // External wallet (Slush, Sui Wallet vb.)
+  externalWalletAddress?: string;
 }
 
 interface AuthState {

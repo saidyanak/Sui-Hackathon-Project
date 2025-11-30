@@ -1,387 +1,404 @@
-# 42 Community Platform - Monorepo Project
+# 🏛️ Dede's - Decentralized Community Platform
 
-> 42 Türkiye öğrencileri için topluluk yönetimi, task sistemi ve NFT ödüllendirme platformu
+> A Web2 + Web3 hybrid platform for community management, proposal voting, donations, and NFT achievements on Sui Blockchain
 
-## 🎯 Proje Hakkında
+![Sui](https://img.shields.io/badge/Sui-Blockchain-blue)
+![React](https://img.shields.io/badge/React-18-61dafb)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6)
+![Move](https://img.shields.io/badge/Move-Language-green)
 
-Bu proje, 42 Türkiye kampüsündeki öğrencilerin koalisyonlar, kulüpler ve bireysel olarak etkinlik düzenlemesini, topluluk isteklerini (task) yönetmesini ve bağış toplamasını sağlayan bir Web2 + Web3 hibrit platformudur.
+## 🎯 Project Overview
 
-### Ana Özellikler
+**Dede's** is a decentralized community platform that enables organizations, clubs, and individuals to create proposals, collect donations, vote on initiatives, and earn NFT achievements. Built for the **Sui Hackathon 2024**.
 
-- 🔐 **42 Intra OAuth** ile giriş (Web2)
-- 💼 **Sui Wallet** entegrasyonu (Web3)
-- 📝 **Task Sistemi** - Topluluk tarafından oluşturulan görevler
-- 💰 **Bağış Sistemi** - SUI token ile bağış yapma
-- 🏆 **NFT Achievement** - Başarılar için NFT ödülleri
-- 💬 **Tartışma/Forum** - Task'lar için yorum sistemi
+### 🌟 Key Features
 
-### Task Türleri
+| Feature | Description |
+|---------|-------------|
+| 🔐 **42 OAuth + zkLogin** | Seamless Web2 → Web3 onboarding with automatic wallet creation |
+| 💰 **Real SUI Donations** | Direct SUI token transfers to community treasury |
+| 🗳️ **On-Chain Voting** | Transparent voting system stored on Sui blockchain |
+| 🏆 **NFT Achievements** | Earn achievement NFTs for contributions |
+| 📊 **Leaderboard** | Track top contributors with reputation scoring |
+| 💬 **Discussion System** | Comment and discuss proposals |
 
-1. **Donation Tasks:** Bağış toplanması gereken görevler (örn: "Kampüse tost makinesi alalım")
-2. **Participation Tasks:** Katılım gerektiren etkinlikler (örn: "Voleybol turnuvası")
-3. **Hybrid Tasks:** Hem bağış hem katılım içeren görevler
+### 📋 Task Types
 
-### NFT Ödülleri
+1. **🎁 Donation Tasks** - Crowdfunding for community needs (e.g., "Buy a coffee machine for the office")
+2. **👥 Participation Tasks** - Events requiring sign-ups (e.g., "Volleyball tournament")
+3. **🔄 Voting Tasks** - Community decisions with Yes/No voting
+4. **🌐 Hybrid Tasks** - Combination of donations + participation
 
-Kullanıcılar şu durumlarda NFT kazanır:
-- Bir etkinliği tamamladığında
-- Haftalık/aylık bağış birincisi olduğunda
-- İlk bağışını yaptığında
-- Özel başarılara ulaştığında
+---
 
-NFT'ler kullanıcı profilinde achievement rozetleri olarak görünür.
-
-## 📁 Proje Yapısı
+## 🏗️ Architecture
 
 ```
-.
-├── packages/
-│   ├── backend/          # Node.js + Express + TypeScript + Prisma
-│   │   ├── src/
-│   │   │   ├── routes/       # API routes
-│   │   │   ├── controllers/  # Request handlers
-│   │   │   ├── services/     # Business logic
-│   │   │   ├── middlewares/  # Auth, validation
-│   │   │   ├── config/       # Configuration
-│   │   │   └── index.js      # Server entry
-│   │   ├── prisma/
-│   │   │   └── schema.prisma # Database schema
-│   │   ├── package.json
-│   │   ├── .env.example
-│   │   └── .gitignore
-│   │
-│   ├── frontend/         # React + TypeScript + Vite + Tailwind
-│   │   ├── src/
-│   │   │   ├── components/   # React components
-│   │   │   ├── pages/        # Route pages
-│   │   │   ├── stores/       # Zustand stores
-│   │   │   ├── services/     # API services
-│   │   │   ├── hooks/        # Custom hooks
-│   │   │   ├── utils/        # Utilities
-│   │   │   ├── App.jsx
-│   │   │   └── main.jsx
-│   │   ├── index.html
-│   │   ├── vite.config.js
-│   │   ├── tailwind.config.js
-│   │   ├── package.json
-│   │   └── .gitignore
-│   │
-│   └── contracts/        # Sui Move Smart Contracts
-│       ├── donation/         # Donation contract
-│       ├── nft/              # NFT achievement contract
-│       └── Move.toml
-│
-├── package.json          # Root workspace yönetimi
-├── .gitignore
-├── README.md             # Bu dosya
-├── TECH_STACK.md         # Detaylı teknoloji dokümanı
-└── ROADMAP.md            # Geliştirme yol haritası
+┌─────────────────────────────────────────────────────────────────┐
+│                         FRONTEND                                 │
+│  React + TypeScript + Tailwind + @mysten/dapp-kit               │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │
+│  │  Home   │ │ Tasks   │ │ Profile │ │ Leader  │ │ zkLogin │   │
+│  │  Page   │ │ Detail  │ │  Page   │ │  board  │ │  Flow   │   │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘   │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ REST API
+┌────────────────────────────▼────────────────────────────────────┐
+│                         BACKEND                                  │
+│  Node.js + Express + TypeScript + Prisma                        │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐               │
+│  │  Auth   │ │  Tasks  │ │ Profile │ │  User   │               │
+│  │ Routes  │ │ Routes  │ │ Routes  │ │ Routes  │               │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘               │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        ▼                    ▼                    ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│  PostgreSQL   │   │  Sui Network  │   │  42 Intra     │
+│   (Prisma)    │   │   (Testnet)   │   │   OAuth API   │
+└───────────────┘   └───────────────┘   └───────────────┘
 ```
 
-## 🛠️ Teknoloji Yığını
+---
 
-### Backend
-- **Node.js** + **Express.js** + **TypeScript**
-- **PostgreSQL** + **Prisma ORM**
-- **Passport.js** (42 OAuth)
-- **JWT** (Authentication)
-- **@mysten/sui.js** (Sui blockchain interaction)
+## 🛠️ Technology Stack
 
 ### Frontend
-- **React 18** + **TypeScript**
-- **Vite** (Build tool)
-- **Tailwind CSS** (Styling)
-- **Zustand** (State management)
-- **React Router** (Routing)
-- **React Query** (API caching)
-- **@mysten/dapp-kit** (Sui wallet integration)
+| Technology | Purpose |
+|------------|---------|
+| **React 18** | UI Framework |
+| **TypeScript** | Type Safety |
+| **Vite** | Build Tool |
+| **Tailwind CSS** | Styling |
+| **Zustand** | State Management |
+| **React Query** | Server State & Caching |
+| **@mysten/dapp-kit** | Sui Wallet Integration |
+| **@mysten/zklogin** | Zero-Knowledge Login |
+
+### Backend
+| Technology | Purpose |
+|------------|---------|
+| **Node.js** | Runtime |
+| **Express.js** | Web Framework |
+| **TypeScript** | Type Safety |
+| **Prisma** | ORM |
+| **PostgreSQL** | Database |
+| **Passport.js** | OAuth Authentication |
+| **JWT** | Token Management |
 
 ### Blockchain
-- **Sui Network** (Testnet/Mainnet)
-- **Sui Move** (Smart contract language)
-- **Sui Wallet** (Browser extension)
+| Technology | Purpose |
+|------------|---------|
+| **Sui Network** | L1 Blockchain |
+| **Move Language** | Smart Contracts |
+| **Sui Wallet** | External Wallet Support |
+| **zkLogin** | Web2 → Web3 Bridge |
 
-Detaylı teknoloji açıklamaları için [TECH_STACK.md](TECH_STACK.md) dosyasına bakın.
+---
 
-## 🚀 Hızlı Başlangıç
+## 📦 Smart Contracts
 
-### Ön Gereksinimler
+### Deployed on Sui Testnet
 
-- **Node.js** v18 veya üzeri
-- **npm** v9 veya üzeri
-- **PostgreSQL** (local veya Docker)
-- **Git**
-- **Sui Wallet** (browser extension - testnet için)
+| Contract | Package ID |
+|----------|------------|
+| **community_platform** | `0x741ed80886eac111ca2439baa6bbe22d155e73661ed8a5b13f1115423a90553e` |
 
-### Kurulum
+### Move Modules
 
-1. **Repository'yi klonlayın:**
+#### 1. `task.move` - Task Management
+```move
+// Core Functions
+- create_task()           // Create new proposal
+- donate_to_sponsor()     // Real SUI transfer to treasury
+- record_donation_sponsored() // Record sponsored donations
+- vote()                  // Cast yes/no vote
+- participate()           // Join participation task
+- add_comment()           // Add discussion comment
+- complete_task()         // Mark task as completed
+```
+
+#### 2. `profile.move` - User Profiles
+```move
+// Core Functions
+- create_profile()        // Create on-chain profile
+- update_profile()        // Update profile data
+- add_reputation()        // Increase reputation score
+```
+
+#### 3. `nft.move` - Achievement NFTs
+```move
+// Core Functions
+- mint_achievement()      // Mint achievement NFT
+- transfer_nft()          // Transfer NFT ownership
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js v18+
+- PostgreSQL
+- Sui CLI (optional)
+- Sui Wallet Browser Extension
+
+### Installation
 
 ```bash
-git clone <repo-url>
+# Clone repository
+git clone https://github.com/saidyanak/Sui-Hackathon-Project.git
 cd "Dede's"
+
+# Install dependencies
+npm install
+cd packages/backend && npm install
+cd ../frontend && npm install
 ```
 
-2. **Bağımlılıkları yükleyin:**
+### Environment Setup
 
-```bash
-# Root dizinde
-npm install
-
-# Backend
-cd packages/backend
-npm install
-
-# Frontend
-cd ../frontend
-npm install
-
-# Veya tek komutla (root'tan):
-npm run install:all
-```
-
-3. **Environment değişkenlerini ayarlayın:**
-
-```bash
-# Backend
-cd packages/backend
-cp .env.example .env
-```
-
-`.env` dosyasını düzenleyin:
+**Backend** (`packages/backend/.env`):
 ```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/community_db"
+DATABASE_URL="postgresql://user:pass@localhost:5432/dedes_db"
+JWT_SECRET="your-secret-key"
 
-# JWT
-JWT_SECRET="your-super-secret-jwt-key"
-
-# 42 OAuth (https://profile.intra.42.fr/oauth/applications)
-OAUTH_42_CLIENT_ID="your-42-client-id"
-OAUTH_42_CLIENT_SECRET="your-42-client-secret"
+# 42 OAuth
+OAUTH_42_CLIENT_ID="your-client-id"
+OAUTH_42_CLIENT_SECRET="your-client-secret"
 OAUTH_42_CALLBACK_URL="http://localhost:3000/api/auth/42/callback"
 
-# Sui Network
-SUI_NETWORK="testnet"
-SUI_PACKAGE_ID="your-deployed-package-id"
+# Sui
+PACKAGE_ID="0x741ed80886eac111ca2439baa6bbe22d155e73661ed8a5b13f1115423a90553e"
+PROFILE_REGISTRY_ID="0xaebf22af17f39e2fe57cd4ec73b1d855f23d47b2d9eded2a24853ad92b58fbdc"
+SPONSOR_ADDRESS="0xc41d4455273841e9cb81ae9f6034c0966a61bb540892a5fd8caa9614e2c44115"
 
-# Server
-PORT=3000
-NODE_ENV=development
+FRONTEND_URL="http://localhost:5173"
 ```
 
-4. **Database setup:**
+**Frontend** (`packages/frontend/.env`):
+```env
+VITE_API_URL="http://localhost:3000"
+VITE_PACKAGE_ID="0x741ed80886eac111ca2439baa6bbe22d155e73661ed8a5b13f1115423a90553e"
+VITE_PROFILE_REGISTRY_ID="0xaebf22af17f39e2fe57cd4ec73b1d855f23d47b2d9eded2a24853ad92b58fbdc"
+VITE_SPONSOR_ADDRESS="0xc41d4455273841e9cb81ae9f6034c0966a61bb540892a5fd8caa9614e2c44115"
+```
+
+### Database Setup
 
 ```bash
 cd packages/backend
-
-# Prisma migration
 npx prisma migrate dev --name init
-
-# Seed data (coalitions)
-npx prisma db seed
+npx prisma generate
 ```
 
-## 🏃 Çalıştırma
+### Run Development Servers
 
-### Development Mode
-
-**Backend:**
 ```bash
+# Terminal 1 - Backend
 cd packages/backend
 npm run dev
-```
-Backend: http://localhost:3000
 
-**Frontend:**
-```bash
+# Terminal 2 - Frontend
 cd packages/frontend
 npm run dev
 ```
-Frontend: http://localhost:5173
 
-**Her ikisini birden (root'tan):**
-```bash
-npm run dev
-```
+- **Backend**: http://localhost:3000
+- **Frontend**: http://localhost:5173
 
-### Production Build
-
-**Frontend:**
-```bash
-cd packages/frontend
-npm run build
-npm run preview
-```
-
-## 📖 Geliştirme Rehberi
-
-Detaylı geliştirme adımları ve yol haritası için [ROADMAP.md](ROADMAP.md) dosyasına bakın.
-
-### Phase'ler
-
-1. **Phase 1:** Project Setup & Foundation (1 hafta)
-2. **Phase 2:** 42 OAuth Authentication (3-4 gün)
-3. **Phase 3:** Task Management System (1 hafta)
-4. **Phase 4:** Sui Wallet Integration (3-4 gün)
-5. **Phase 5:** Donation System (1 hafta)
-6. **Phase 6:** NFT Achievement System (1 hafta)
-7. **Phase 7:** Community Features (1 hafta)
-8. **Phase 8:** Testing & Polish (1 hafta)
-9. **Phase 9:** Deployment (2-3 gün)
-
-**Toplam:** 6-8 hafta (full-time)
+---
 
 ## 🔗 API Endpoints
 
 ### Authentication
-```
-POST /api/auth/42/login       - 42 OAuth login başlat
-GET  /api/auth/42/callback    - OAuth callback
-POST /api/auth/logout         - Logout
-GET  /api/auth/me             - Mevcut kullanıcı bilgisi
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/42` | Initiate 42 OAuth |
+| GET | `/api/auth/42/callback` | OAuth callback |
+| POST | `/api/auth/logout` | Logout user |
+| GET | `/api/auth/me` | Get current user |
 
 ### Tasks
-```
-GET    /api/tasks              - Task listesi
-GET    /api/tasks/:id          - Task detayı
-POST   /api/tasks              - Yeni task oluştur
-PUT    /api/tasks/:id          - Task güncelle
-DELETE /api/tasks/:id          - Task sil
-GET    /api/tasks/:id/comments - Task yorumları
-POST   /api/tasks/:id/comments - Yorum ekle
-```
-
-### Donations
-```
-POST /api/tasks/:id/donate     - Bağış yap
-POST /api/donations/verify     - Transaction doğrula
-GET  /api/tasks/:id/donations  - Task bağışları
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tasks` | List all tasks |
+| GET | `/api/tasks/:id` | Get task details |
+| POST | `/api/tasks` | Create new task |
+| POST | `/api/tasks/:id/vote` | Vote on task |
+| POST | `/api/tasks/:id/participate` | Join task |
+| POST | `/api/tasks/:id/comment` | Add comment |
+| POST | `/api/tasks/:id/donate-sponsored` | Record donation |
 
 ### Users
-```
-GET  /api/users/:id            - Kullanıcı profili
-PUT  /api/users/wallet         - Wallet adresi güncelle
-GET  /api/users/:id/nfts       - Kullanıcı NFT'leri
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/user/leaderboard` | Get leaderboard |
+| POST | `/api/user/wallet` | Update wallet address |
+| POST | `/api/user/mint-achievement` | Mint NFT |
 
-### NFT
-```
-POST /api/nft/mint             - NFT mint et (admin)
-GET  /api/nft/achievements     - Achievement türleri
-```
-
-## 🎨 Frontend Routing
-
-```
-/                    - Ana sayfa
-/login              - Login sayfası
-/tasks              - Task listesi
-/tasks/:id          - Task detay
-/tasks/create       - Task oluştur
-/profile/:id        - Kullanıcı profili
-/coalitions         - Koalisyonlar
-/leaderboard        - Sıralama
-/my-nfts            - NFT koleksiyonum
-```
-
-## 🧪 Testing
-
-```bash
-# Backend tests
-cd packages/backend
-npm test
-
-# Frontend tests
-cd packages/frontend
-npm test
-
-# E2E tests
-npm run test:e2e
-```
-
-## 📦 Deployment
-
-### Frontend (Vercel)
-
-```bash
-cd packages/frontend
-vercel
-```
-
-### Backend (Railway)
-
-```bash
-cd packages/backend
-railway login
-railway init
-railway up
-```
-
-### Smart Contracts (Sui)
-
-```bash
-cd packages/contracts
-sui client publish --gas-budget 100000000
-```
-
-Detaylı deployment talimatları için [ROADMAP.md](ROADMAP.md) - Phase 9'a bakın.
-
-## 🔐 Güvenlik
-
-- 42 OAuth credentials'ları `.env` dosyasında saklanır
-- JWT secret güçlü ve rastgele olmalı
-- Wallet private key'leri ASLA backend'de saklanmaz
-- Rate limiting aktif
-- Input validation (Zod)
-- CORS yapılandırması
-- Helmet.js güvenlik headers
-
-## 🤝 Katkıda Bulunma
-
-1. Fork yapın
-2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Commit edin (`git commit -m 'feat: add amazing feature'`)
-4. Push edin (`git push origin feature/amazing-feature`)
-5. Pull Request açın
-
-## 📝 Commit Convention
-
-```
-feat: Yeni özellik
-fix: Bug fix
-docs: Dokümantasyon
-style: Formatting
-refactor: Code refactoring
-test: Test ekleme
-chore: Maintenance
-```
-
-## 📄 Lisans
-
-ISC
-
-## 🙏 Teşekkürler
-
-- 42 Türkiye Community
-- Sui Foundation
-- Anthropic (Claude AI)
-
-## 📞 İletişim
-
-Sorularınız için:
-- GitHub Issues
-- 42 Slack: #community-platform
+### Profile
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/profile` | Get user profile |
+| POST | `/api/profile/update-donation-stats` | Update donation stats |
 
 ---
 
-**Not:** Bu proje Sui Hackathon için geliştirilmiştir ve aktif geliştirme aşamasındadır.
+## 🎨 Application Pages
 
-## 📚 Kaynaklar
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Home | Dashboard with task list, stats, sidebar |
+| `/login` | Login | 42 OAuth login page |
+| `/zklogin` | zkLogin | Sui wallet creation flow |
+| `/tasks/create` | Create Task | New proposal form |
+| `/tasks/:id` | Task Detail | Full task view with voting, donations, comments |
+| `/profile` | Profile | User profile with stats and NFTs |
+| `/leaderboard` | Leaderboard | Top contributors ranking |
 
-- [TECH_STACK.md](TECH_STACK.md) - Detaylı teknoloji açıklamaları
-- [ROADMAP.md](ROADMAP.md) - Adım adım geliştirme rehberi
+---
+
+## 📊 Scoring System
+
+The leaderboard ranks users based on their contributions:
+
+| Action | Points |
+|--------|--------|
+| 💰 Donate 1 SUI | +10 points |
+| 📝 Create Task | +50 points |
+| 🙋 Participate in Task | +20 points |
+| 🗳️ Cast Vote | +5 points |
+
+**Formula**: `Score = (totalDonated / 1e9) * 10 + tasksCreated * 50 + tasksParticipated * 20 + votesCount * 5`
+
+---
+
+## 🏆 NFT Achievements
+
+Users earn NFT badges for:
+
+- 🎖️ **First Donation** - Make your first donation
+- 🏅 **Top Donor** - Weekly/Monthly donation leader
+- ⭐ **Task Creator** - Create a successful proposal
+- 🎯 **Active Participant** - Participate in 10+ tasks
+- 👑 **Community Leader** - Reach 1000+ reputation
+
+---
+
+## 📁 Project Structure
+
+```
+Dede's/
+├── packages/
+│   ├── backend/
+│   │   ├── src/
+│   │   │   ├── config/          # DB, Passport, Sponsor config
+│   │   │   ├── middlewares/     # Auth middleware
+│   │   │   ├── routes/          # API routes
+│   │   │   ├── types/           # TypeScript types
+│   │   │   ├── utils/           # JWT utilities
+│   │   │   └── index.ts         # Server entry
+│   │   ├── prisma/
+│   │   │   └── schema.prisma    # Database schema
+│   │   └── package.json
+│   │
+│   ├── frontend/
+│   │   ├── src/
+│   │   │   ├── components/      # React components
+│   │   │   ├── pages/           # Route pages
+│   │   │   ├── services/        # API services
+│   │   │   ├── stores/          # Zustand stores
+│   │   │   ├── hooks/           # Custom hooks
+│   │   │   └── App.tsx          # Main app
+│   │   └── package.json
+│   │
+│   └── move/
+│       └── community_platform/
+│           ├── sources/
+│           │   ├── task.move    # Task management
+│           │   ├── profile.move # User profiles
+│           │   └── nft.move     # Achievement NFTs
+│           └── Move.toml
+│
+├── README.md
+├── SUNUM.md                     # Turkish presentation
+└── package.json
+```
+
+---
+
+## 🔐 Security
+
+- ✅ 42 OAuth for authentication
+- ✅ JWT tokens with expiration
+- ✅ Helmet.js security headers
+- ✅ Rate limiting on API
+- ✅ CORS configuration
+- ✅ Input validation
+- ✅ Wallet signatures for transactions
+- ✅ No private keys stored on backend
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open Pull Request
+
+### Commit Convention
+
+```
+feat: New feature
+fix: Bug fix
+docs: Documentation
+style: Formatting
+refactor: Code refactoring
+test: Add tests
+chore: Maintenance
+```
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **Sui Foundation** - For the hackathon and Sui blockchain
+- **42 Network** - For OAuth integration support
+- **Mysten Labs** - For excellent Sui SDKs
+
+---
+
+## 👥 Team
+
+Built with ❤️ for **Sui Hackathon 2024**
+
+- GitHub: [@saidyanak](https://github.com/saidyanak)
+
+---
+
+## 📞 Contact
+
+- **GitHub Issues**: For bug reports and feature requests
+- **Discord**: Join our community server
+
+---
+
+> **Note**: This project is actively developed for the Sui Hackathon. Smart contracts are deployed on Sui Testnet.
+
+## 🔗 Links
+
 - [Sui Documentation](https://docs.sui.io)
-- [42 API Documentation](https://api.intra.42.fr/apidoc)
+- [Move Language Book](https://move-book.com)
+- [@mysten/dapp-kit](https://sdk.mystenlabs.com/dapp-kit)
+- [zkLogin Guide](https://docs.sui.io/concepts/cryptography/zklogin)
