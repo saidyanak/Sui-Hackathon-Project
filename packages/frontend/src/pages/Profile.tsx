@@ -9,16 +9,80 @@ import api from '../services/api';
 
 // Achievement tanımları
 const ACHIEVEMENTS = [
-  { type: 0, name: 'İlk Görev', description: 'İlk görevinizi tamamladınız', icon: '🎯', rarity: 'Common', requirement: 'İlk görevi tamamla' },
-  { type: 1, name: 'İlk Bağış', description: 'İlk bağışınızı yaptınız', icon: '💝', rarity: 'Common', requirement: 'İlk bağışı yap' },
-  { type: 2, name: 'Görev Oluşturucu', description: 'İlk görevinizi oluşturdunuz', icon: '📝', rarity: 'Rare', requirement: '1 görev oluştur' },
-  { type: 3, name: 'Cömert Bağışçı', description: '10+ SUI bağışladınız', icon: '💎', rarity: 'Rare', requirement: '10 SUI bağışla' },
-  { type: 4, name: 'Aktif Katılımcı', description: '10+ göreve katıldınız', icon: '⚡', rarity: 'Rare', requirement: '10 göreve katıl' },
-  { type: 5, name: 'Topluluk Lideri', description: '5+ başarılı görev oluşturdunuz', icon: '👑', rarity: 'Epic', requirement: '5 onaylanan görev' },
-  { type: 6, name: 'Destekçi', description: '20+ farklı göreve bağış yaptınız', icon: '🌟', rarity: 'Epic', requirement: '20 bağış yap' },
-  { type: 7, name: 'Süper Gönüllü', description: '50+ görev tamamladınız', icon: '🏆', rarity: 'Legendary', requirement: '50 görev tamamla' },
-  { type: 8, name: 'Efsanevi 42', description: 'Olağanüstü topluluk katkısı', icon: '🔥', rarity: 'Legendary', requirement: '100 rep + 20 görev' },
+  { 
+    type: 0, 
+    name: 'First Task', 
+    description: 'You completed your first task', 
+    icon: '🎯', 
+    rarity: 'Common', 
+    requirement: 'Complete your first task' 
+  },
+  { 
+    type: 1, 
+    name: 'First Donation', 
+    description: 'You made your first donation', 
+    icon: '💝', 
+    rarity: 'Common', 
+    requirement: 'Make your first donation' 
+  },
+  { 
+    type: 2, 
+    name: 'Task Creator', 
+    description: 'You created your first task', 
+    icon: '📝', 
+    rarity: 'Rare', 
+    requirement: 'Create a task' 
+  },
+  { 
+    type: 3, 
+    name: 'Generous Donor', 
+    description: 'You donated more than 10 SUI', 
+    icon: '💎', 
+    rarity: 'Rare', 
+    requirement: 'Donate 10 SUI' 
+  },
+  { 
+    type: 4, 
+    name: 'Active Participant', 
+    description: 'You participated in more than 10 tasks', 
+    icon: '⚡', 
+    rarity: 'Rare', 
+    requirement: 'Participate in 10 tasks' 
+  },
+  { 
+    type: 5, 
+    name: 'Community Leader', 
+    description: 'You created more than 5 successfully approved proposals', 
+    icon: '👑', 
+    rarity: 'Epic', 
+    requirement: 'Have 5 approved proposals' 
+  },
+  { 
+    type: 6, 
+    name: 'Supporter', 
+    description: 'You donated to more than 20 different tasks', 
+    icon: '🌟', 
+    rarity: 'Epic', 
+    requirement: 'Make 20 donations' 
+  },
+  { 
+    type: 7, 
+    name: 'Super Volunteer', 
+    description: 'You completed more than 50 tasks', 
+    icon: '🏆', 
+    rarity: 'Legendary', 
+    requirement: 'Complete 50 tasks' 
+  },
+  { 
+    type: 8, 
+    name: 'Legendary 42', 
+    description: 'Outstanding contribution to the community', 
+    icon: '🔥', 
+    rarity: 'Legendary', 
+    requirement: '100 reputation + 20 completed tasks' 
+  },
 ];
+
 
 // Rarity renkleri
 const RARITY_COLORS: { [key: string]: string } = {
